@@ -230,7 +230,7 @@
 
   <div class="info-row">
     <span class="info-label">卫星</span>
-    <span class="info-value">GK2A ELA (128.2E) / VIIRS</span>
+    <span class="info-value">GK2A 全圆盘 (128.2E)</span>
   </div>
   <div class="info-row">
     <span class="info-label">实时数据</span>
@@ -277,9 +277,9 @@
 
   <!-- GK2A 实时卫星云图 -->
   <div class="satellite-section" style="border-top:1px solid rgba(255,255,255,0.1)">
-    <div class="section-label">🛰️ GK2A 东亚区域云图 (每2分钟更新)</div>
+    <div class="section-label">🛰️ GK2A 中国区域云图 (全圆盘投影校正, 每10分钟更新)</div>
     <div class="toggle-row">
-      <span class="toggle-label">显示 GK2A 东亚云图</span>
+      <span class="toggle-label">显示 GK2A 中国区域云图</span>
       <label class="toggle-switch">
         <input type="checkbox" id="gk2aToggle" checked onchange="toggleGk2a()">
         <span class="toggle-slider"></span>
@@ -710,8 +710,10 @@ function updateSatOpacity(type, val) {
   }
 }
 
-// ===== GK2A ELA 区域卫星云图 (静止卫星投影→等经纬度投影转换) =====
-const GK2A_SECTOR = 'ela';
+// ===== GK2A 全圆盘卫星云图 (静止卫星投影→等经纬度投影转换, 裁剪至中国区域) =====
+// 注意: ELA 扇区使用 Lambert Conic Conformal (LCC) 投影, 不是静止卫星投影
+//       全圆盘 (full_disk) 扇区才是原始静止卫星投影, 可正确转换
+const GK2A_SECTOR = 'full_disk';
 const GK2A_PRODUCTS = {
   geocolor: { name: '真彩色', product: 'geocolor', desc: 'GeoColor 真彩色合成' },
   band_13: { name: '红外亮温', product: 'band_13', desc: 'Band 13 IR (10.5μm)' },
@@ -725,27 +727,55 @@ const GK2A_PRODUCTS = {
 const GK2A_BOUNDS = [[5, 65], [55, 160]];
 
 // 静止卫星投影参数 (GK2A 位于 128.2°E, 赤道上空 35786km)
+// 参数来源: GK2A netCDF 文件全局属性
 const GK2A_SAT_LON = 128.2;
-const GK2A_SAT_H = 35786000; // 卫星高度 (m) - 标准地球静止轨道
+const GK2A_SAT_H = 35785863; // 卫星高度 (地表以上, m) = nominal_satellite_height(42164000) - earth_equatorial_radius(6378137)
 const GK2A_RE = 6378137.0; // 地球赤道半径 (WGS84)
-const GK2A_RP = 6356752.314; // 地球极半径 (WGS84)
-const GK2A_RE_PROJ = '+proj=geos +lon_0=' + GK2A_SAT_LON + ' +h=' + GK2A_SAT_H + ' +a=' + GK2A_RE + ' +b=' + GK2A_RP + ' +units=m +no_defs';
+const GK2A_RP = 6356752.3; // 地球极半径 (WGS84)
 
-// 直接计算扫描角 (不依赖proj4, 避免数值不稳定)
-// 卫星在 (sat_lon, 0) 上空 H 米, 地球半径 R
-// 扫描角 = atan2(卫星到点的y分量, 卫星到点的z分量)
+// 全圆盘图像边界扫描角 (弧度)
+// 来自 GK2A netCDF 文件: image_upperleft_x = -0.15397200, image_lowerright_x = 0.15397200
+// 注意: 这不是理论地球边缘角 arcsin(R/(R+H))≈0.1518, 而是实际图像边界
+// 图像比地球圆盘大约1.4% (边缘有少量太空区域)
+const GK2A_MAX_SCAN = 0.153972;
+
+// 计算扫描角 (GEOS 投影, sweep=y, 椭球修正)
+// 参考: PROJ geos 投影源码, GK2A netCDF 导航参数
+// sweep=y 表示先扫描南北方向(Y), 再扫描东西方向(X)
+// 卫星在 (0, 0, 1+h/a) 归一化坐标, 地表点在 (Vx, Vy, Vz)
 function scanAngleFromLatLng(lat, lng) {
   const latR = lat * Math.PI / 180;
   const dLonR = (lng - GK2A_SAT_LON) * Math.PI / 180;
-  const R = GK2A_RE; // 使用赤道半径近似
-  // 卫星到地心向量: [0, 0, R+H]
-  // 地表点向量: [R*cos(lat)*cos(dLon), R*cos(lat)*sin(dLon), R*sin(lat)]
-  // 卫星到点向量: [R*cos(lat)*cos(dLon), R*cos(lat)*sin(dLon), R*sin(lat) - (R+H)]
-  const vx = R * Math.cos(latR) * Math.sin(dLonR);
-  const vy = R * Math.sin(latR);
-  const vz = (R + GK2A_SAT_H) - R * Math.cos(latR) * Math.cos(dLonR); // -V_z (nadir朝向)
-  const sx = Math.atan2(vx, vz);
-  const sy = Math.atan2(vy, vz);
+
+  // 椭球修正: 地理纬度 → 地心纬度
+  // PROJ geos 椭球公式: phi_geo = atan((b/a)² * tan(phi))
+  const rp = GK2A_RP / GK2A_RE; // b/a
+  const rp2 = rp * rp; // (b/a)² = 1 - e²
+  const geoLat = Math.atan(rp2 * Math.tan(latR));
+
+  // 地心半径 (归一化到 a=1)
+  // PROJ: r = (b/a) / hypot((b/a)*cos(phi_geo), sin(phi_geo))
+  const r = rp / Math.hypot(rp * Math.cos(geoLat), Math.sin(geoLat));
+
+  // 地表点位置向量 (归一化, 以 a 为单位)
+  const Vx = r * Math.cos(dLonR) * Math.cos(geoLat);
+  const Vy = r * Math.sin(dLonR) * Math.cos(geoLat);
+  const Vz = r * Math.sin(geoLat);
+
+  // 卫星位置: (0, 0, 1 + h/a)
+  // tmp = 卫星到地表点在 nadir 方向的分量 (正值=可见)
+  const hNorm = GK2A_SAT_H / GK2A_RE;
+  const tmp = (1 + hNorm) - Vx;
+
+  // sweep=y (GK2A/Himawari/Meteosat):
+  //   sx = atan(Vy / tmp)                    — 东西扫描角
+  //   sy = atan(Vz / hypot(Vy, tmp))         — 南北扫描角 (注意分母是 hypot, 不是 tmp)
+  // sweep=x (GOES) 则相反:
+  //   sx = atan(Vy / hypot(Vz, tmp))
+  //   sy = atan(Vz / tmp)
+  const sx = Math.atan2(Vy, tmp);
+  const sy = Math.atan2(Vz, Math.hypot(Vy, tmp));
+
   return [sx, sy];
 }
 
@@ -761,34 +791,16 @@ function isVisibleFromSat(lat, lng) {
   return centralAngle < maxCentralAngle;
 }
 
-// 预计算扫描角范围 (从可见点的密集网格推算)
-function computeScanRange() {
-  let sxMin = Infinity, sxMax = -Infinity, syMin = Infinity, syMax = -Infinity;
-  const latStep = 0.25; // 密集采样
-  const lonStep = 0.25;
-  let validCount = 0;
-  for (let lat = GK2A_BOUNDS[0][0]; lat <= GK2A_BOUNDS[1][0]; lat += latStep) {
-    for (let lng = GK2A_BOUNDS[0][1]; lng <= GK2A_BOUNDS[1][1]; lng += lonStep) {
-      if (!isVisibleFromSat(lat, lng)) continue;
-      const [sx, sy] = scanAngleFromLatLng(lat, lng);
-      if (!isFinite(sx) || !isFinite(sy)) continue;
-      sxMin = Math.min(sxMin, sx); sxMax = Math.max(sxMax, sx);
-      syMin = Math.min(syMin, sy); syMax = Math.max(syMax, sy);
-      validCount++;
-    }
-  }
-  // 添加 1% 边距, 确保覆盖完整瓦片区域
-  const sxMargin = (sxMax - sxMin) * 0.01;
-  const syMargin = (syMax - syMin) * 0.01;
-  const result = {
-    sxMin: sxMin - sxMargin, sxMax: sxMax + sxMargin,
-    syMin: syMin - syMargin, syMax: syMax + syMargin,
+// 全圆盘扫描角范围 (固定值, 不需要从区域推算)
+// 全圆盘图像是正方形, 扫描角范围对称: [-maxScan, +maxScan]
+function getFullDiskScanRange() {
+  return {
+    sxMin: -GK2A_MAX_SCAN, sxMax: GK2A_MAX_SCAN,
+    syMin: -GK2A_MAX_SCAN, syMax: GK2A_MAX_SCAN,
   };
-  console.log(`[GK2A] 扫描角范围: x=[${result.sxMin.toFixed(5)},${result.sxMax.toFixed(5)}] y=[${result.syMin.toFixed(5)},${result.syMax.toFixed(5)}] (${validCount}个有效采样点)`);
-  return result;
 }
 
-let gk2aScanRange = null;
+let gk2aScanRange = null; // 全圆盘扫描角范围 (延迟初始化)
 let gk2aCurrentProduct = 'geocolor';
 let gk2aLayer = null;
 let gk2aTimestamp = null;
@@ -796,12 +808,15 @@ let gk2aTimestampStr = null;
 let gk2aRefreshTimer = null;
 let gk2aCountdownTimer = null;
 let gk2aNextRefreshTime = null;
-const GK2A_REFRESH_INTERVAL = 2 * 60 * 1000;
+const GK2A_REFRESH_INTERVAL = 10 * 60 * 1000; // 全圆盘每10分钟更新一次
 
 const CORS_PROXIES = [
   (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
   (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
 ];
+
+// 图像专用 CORS 代理 (images.weserv.nl 支持 CORS, 可用于 canvas 操作)
+const IMAGE_PROXY = (url) => `https://images.weserv.nl/?url=${encodeURIComponent(url.replace('https://', ''))}`;
 
 function fetchWithTimeout(url, timeoutMs = 8000) {
   return new Promise((resolve, reject) => {
@@ -841,15 +856,44 @@ async function fetchGk2aTimestamp(product) {
 
 function estimateGk2aTimestamp() {
   const now = new Date();
-  now.setMinutes(now.getMinutes() - 5);
+  now.setMinutes(now.getMinutes() - 30); // 全圆盘数据处理延迟约30分钟
   const mins = now.getMinutes();
-  now.setMinutes(Math.floor(mins / 2) * 2, 0, 0);
+  now.setMinutes(Math.floor(mins / 10) * 10, 0, 0); // 全圆盘每10分钟一次
   const y = now.getUTCFullYear();
   const m = String(now.getUTCMonth() + 1).padStart(2, '0');
   const d = String(now.getUTCDate()).padStart(2, '0');
   const h = String(now.getUTCHours()).padStart(2, '0');
   const mi = String(now.getUTCMinutes()).padStart(2, '0');
-  return `${y}${m}${d}${h}${mi}`;
+  return `${y}${m}${d}${h}${mi}00`; // 14位: YYYYMMDDHHMMSS
+}
+
+// 时间戳偏移: 返回偏移后的14位时间戳
+function shiftTimestamp(ts, deltaMinutes) {
+  const y = parseInt(ts.slice(0, 4));
+  const mo = parseInt(ts.slice(4, 6)) - 1;
+  const d = parseInt(ts.slice(6, 8));
+  const h = parseInt(ts.slice(8, 10));
+  const mi = parseInt(ts.slice(10, 12));
+  const dt = new Date(Date.UTC(y, mo, d, h, mi, 0));
+  dt.setMinutes(dt.getMinutes() + deltaMinutes);
+  const yy = dt.getUTCFullYear();
+  const mm = String(dt.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(dt.getUTCDate()).padStart(2, '0');
+  const hh = String(dt.getUTCHours()).padStart(2, '0');
+  const mmi = String(dt.getUTCMinutes()).padStart(2, '0');
+  return `${yy}${mm}${dd}${hh}${mmi}00`;
+}
+
+// 验证时间戳: 尝试加载一个瓦片来判断该时间戳是否有数据
+async function validateGk2aTimestamp(product, timestamp) {
+  const url = getGk2aTileUrl(product, timestamp, 0, 0, 0);
+  const img = await downloadGk2aTileViaProxy(url);
+  if (img && img.width > 0) {
+    console.log(`[GK2A] 时间戳验证成功: ${timestamp}`);
+    return true;
+  }
+  console.log(`[GK2A] 时间戳验证失败: ${timestamp}`);
+  return false;
 }
 
 // ===== 瓦片下载 (始终通过 CORS 代理, 确保 canvas 可操作) =====
@@ -866,13 +910,58 @@ function downloadGk2aTileViaProxy(url) {
     img.crossOrigin = 'anonymous';
     img.onload = () => resolve(img);
     img.onerror = () => resolve(null);
-    // 通过 CORS 代理加载, 确保 canvas 不被污染
-    img.src = `https://corsproxy.io/?${encodeURIComponent(url)}`;
-    setTimeout(() => { if (!img.complete) resolve(null); }, 10000);
+    // 使用 images.weserv.nl 代理 (支持 CORS, canvas 不会被污染)
+    img.src = IMAGE_PROXY(url);
+    setTimeout(() => { if (!img.complete) resolve(null); }, 12000);
   });
 }
 
 // ===== 拼接瓦片为 canvas (返回 canvas 对象, 不是 data URL) =====
+// 只下载中国区域所需的瓦片, 提高加载速度
+function getNeededTiles(zoomLevel) {
+  const grid = 2 ** zoomLevel;
+  const tileSize = 688;
+  const totalSize = grid * tileSize;
+  const maxScan = GK2A_MAX_SCAN;
+
+  // 计算中国区域四角的扫描角, 转换为像素坐标
+  const corners = [
+    [GK2A_BOUNDS[0][0], GK2A_BOUNDS[0][1]], // SW
+    [GK2A_BOUNDS[0][0], GK2A_BOUNDS[1][1]], // SE
+    [GK2A_BOUNDS[1][0], GK2A_BOUNDS[0][1]], // NW
+    [GK2A_BOUNDS[1][0], GK2A_BOUNDS[1][1]], // NE
+  ];
+
+  let minCol = grid, maxCol = -1, minRow = grid, maxRow = -1;
+  for (const [lat, lng] of corners) {
+    if (!isVisibleFromSat(lat, lng)) continue;
+    const [scanX, scanY] = scanAngleFromLatLng(lat, lng);
+    const px = (scanX / maxScan + 1) * 0.5 * totalSize;
+    const py = (1 - scanY / maxScan) * 0.5 * totalSize;
+    const col = Math.floor(px / tileSize);
+    const row = Math.floor(py / tileSize);
+    minCol = Math.min(minCol, col);
+    maxCol = Math.max(maxCol, col);
+    minRow = Math.min(minRow, row);
+    maxRow = Math.max(maxRow, row);
+  }
+
+  // 添加边距确保覆盖
+  minCol = Math.max(0, minCol - 1);
+  maxCol = Math.min(grid - 1, maxCol + 1);
+  minRow = Math.max(0, minRow - 1);
+  maxRow = Math.min(grid - 1, maxRow + 1);
+
+  const tiles = [];
+  for (let row = minRow; row <= maxRow; row++) {
+    for (let col = minCol; col <= maxCol; col++) {
+      tiles.push({ row, col });
+    }
+  }
+  console.log(`[GK2A] 需要下载 ${tiles.length} 个瓦片 (行列: ${minRow}-${maxRow}, ${minCol}-${maxCol})`);
+  return tiles;
+}
+
 async function stitchGk2aToCanvas(product, timestamp, zoomLevel) {
   const grid = 2 ** zoomLevel;
   const tileSize = 688;
@@ -883,44 +972,57 @@ async function stitchGk2aToCanvas(product, timestamp, zoomLevel) {
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#000000'; ctx.fillRect(0, 0, totalW, totalH);
 
-  const promises = [];
-  for (let row = 0; row < grid; row++) {
-    for (let col = 0; col < grid; col++) {
-      promises.push(
-        downloadGk2aTileViaProxy(getGk2aTileUrl(product, timestamp, row, col, zoomLevel))
-          .then(img => ({ row, col, img }))
-      );
-    }
-  }
+  const neededTiles = getNeededTiles(zoomLevel);
+
+  // 第一轮: 并行下载所有需要的瓦片
+  const promises = neededTiles.map(({ row, col }) =>
+    downloadGk2aTileViaProxy(getGk2aTileUrl(product, timestamp, row, col, zoomLevel))
+      .then(img => ({ row, col, img }))
+  );
 
   const results = await Promise.all(promises);
   let loadedCount = 0;
+  const failedTiles = [];
   for (const { row, col, img } of results) {
     if (img) {
       try { ctx.drawImage(img, col * tileSize, row * tileSize); loadedCount++; }
-      catch (e) { console.warn('[GK2A] 瓦片绘制失败:', e.message); }
+      catch (e) { console.warn('[GK2A] 瓦片绘制失败:', e.message); failedTiles.push({ row, col }); }
+    } else {
+      failedTiles.push({ row, col });
     }
   }
-  console.log(`[GK2A] 拼接完成 (zoom ${zoomLevel}): ${loadedCount}/${results.length} 瓦片, ${totalW}x${totalH}`);
 
-  if (loadedCount < results.length * 0.3) return null;
+  // 第二轮: 重试失败的瓦片
+  if (failedTiles.length > 0) {
+    console.log(`[GK2A] 重试 ${failedTiles.length} 个失败瓦片...`);
+    const retryPromises = failedTiles.map(({ row, col }) =>
+      downloadGk2aTileViaProxy(getGk2aTileUrl(product, timestamp, row, col, zoomLevel))
+        .then(img => ({ row, col, img }))
+    );
+    const retryResults = await Promise.all(retryPromises);
+    for (const { row, col, img } of retryResults) {
+      if (img) {
+        try { ctx.drawImage(img, col * tileSize, row * tileSize); loadedCount++; }
+        catch (e) {}
+      }
+    }
+  }
+
+  console.log(`[GK2A] 拼接完成 (zoom ${zoomLevel}): ${loadedCount}/${neededTiles.length} 瓦片, ${totalW}x${totalH}`);
+
+  if (loadedCount < neededTiles.length * 0.3) return null;
   return canvas;
 }
 
-// ===== 核心: 静止卫星投影 → 等经纬度投影 (EPSG:4326) =====
+// ===== 核心: 静止卫星投影 → 等经纬度投影 (EPSG:4326), 裁剪至中国区域 =====
 function reprojectGk2a(sourceCanvas) {
-  // 输出尺寸: 2000px 宽, 保持纵横比
+  // 输出尺寸: 2000px 宽, 保持中国区域纵横比
   const outW = 2000;
   const outH = Math.round(outW * (GK2A_BOUNDS[1][0] - GK2A_BOUNDS[0][0]) / (GK2A_BOUNDS[1][1] - GK2A_BOUNDS[0][1]));
   const south = GK2A_BOUNDS[0][0], west = GK2A_BOUNDS[0][1];
   const north = GK2A_BOUNDS[1][0], east = GK2A_BOUNDS[1][1];
 
-  // 确保扫描角范围已计算
-  if (!gk2aScanRange) gk2aScanRange = computeScanRange();
-  const { sxMin, sxMax, syMin, syMax } = gk2aScanRange;
-  const sxRange = sxMax - sxMin, syRange = syMax - syMin;
   const sw = sourceCanvas.width, sh = sourceCanvas.height;
-
   const srcCtx = sourceCanvas.getContext('2d');
   const srcData = srcCtx.getImageData(0, 0, sw, sh);
 
@@ -932,24 +1034,31 @@ function reprojectGk2a(sourceCanvas) {
   const latStep = (north - south) / outH;
   const lonStep = (east - west) / outW;
 
-  // 使用与 computeScanRange 一致的直接数学公式, 避免 proj4 不一致
+  // 全圆盘扫描角 → 像素映射:
+  // scanX ∈ [-maxScan, +maxScan] → srcX ∈ [0, sw]  (东=右=大x)
+  // scanY ∈ [+maxScan, -maxScan] → srcY ∈ [0, sh]  (北=上=小y, Y轴翻转)
+  const maxScan = GK2A_MAX_SCAN;
+
   for (let oy = 0; oy < outH; oy++) {
     const lat = south + (oy + 0.5) * latStep;
     for (let ox = 0; ox < outW; ox++) {
       const lng = west + (ox + 0.5) * lonStep;
 
-      // 直接计算扫描角 (与 scanAngleFromLatLng 一致)
+      // 检查该点是否在卫星可见范围内
+      if (!isVisibleFromSat(lat, lng)) continue;
+
+      // 计算扫描角
       const [scanX, scanY] = scanAngleFromLatLng(lat, lng);
 
       // 扫描角 → 源图像像素坐标
-      const sx = (scanX - sxMin) / sxRange * sw;
-      const sy = (scanY - syMin) / syRange * sh;
+      const srcX = (scanX / maxScan + 1) * 0.5 * sw;
+      const srcY = (1 - scanY / maxScan) * 0.5 * sh;
 
       // 双线性插值采样
       const oi = (oy * outW + ox) * 4;
-      if (sx >= 0 && sx < sw - 1 && sy >= 0 && sy < sh - 1) {
-        const fx = Math.floor(sx), fy = Math.floor(sy);
-        const dx = sx - fx, dy = sy - fy;
+      if (srcX >= 0 && srcX < sw - 1 && srcY >= 0 && srcY < sh - 1) {
+        const fx = Math.floor(srcX), fy = Math.floor(srcY);
+        const dx = srcX - fx, dy = srcY - fy;
         const i00 = (fy * sw + fx) * 4;
         const i10 = (fy * sw + (fx + 1)) * 4;
         const i01 = ((fy + 1) * sw + fx) * 4;
@@ -963,12 +1072,12 @@ function reprojectGk2a(sourceCanvas) {
           outData.data[oi + c] = Math.round(v);
         }
       }
-      // 超出源图像范围: 保持透明 (已在 createImageData 中默认 0)
+      // 超出源图像范围: 保持透明
     }
   }
 
   outCtx.putImageData(outData, 0, 0);
-  console.log(`[GK2A] 重投影完成: ${sw}x${sh} → ${outW}x${outH} (静止卫星→等经纬度)`);
+  console.log(`[GK2A] 重投影完成: ${sw}x${sh} → ${outW}x${outH} (全圆盘→中国区域, maxScan=${maxScan.toFixed(5)})`);
   return outCanvas.toDataURL('image/png');
 }
 
@@ -995,22 +1104,38 @@ async function loadGk2aLayer(product, btn) {
   let ts = await fetchGk2aTimestamp(prod.product);
   let sourceLabel = '';
   if (!ts) {
+    // API 获取失败, 使用估算时间戳并验证
     ts = estimateGk2aTimestamp();
     sourceLabel = ' (估算)';
+    console.log(`[GK2A] API获取失败, 估算时间戳: ${ts}, 验证中...`);
+    // 验证估算时间戳, 最多尝试5个10分钟时段
+    let valid = await validateGk2aTimestamp(prod.product, ts);
+    if (!valid) {
+      for (let i = 1; i <= 5; i++) {
+        const prevTs = shiftTimestamp(ts, -i * 10);
+        console.log(`[GK2A] 尝试前一个时段: ${prevTs}`);
+        valid = await validateGk2aTimestamp(prod.product, prevTs);
+        if (valid) { ts = prevTs; break; }
+      }
+    }
+    if (!valid) {
+      // 也尝试更近的时段 (可能延迟较短)
+      for (let i = 1; i <= 3; i++) {
+        const nextTs = shiftTimestamp(estimateGk2aTimestamp(), i * 10);
+        valid = await validateGk2aTimestamp(prod.product, nextTs);
+        if (valid) { ts = nextTs; break; }
+      }
+    }
   }
 
   gk2aTimestamp = ts;
   gk2aTimestampStr = formatGk2aTime(ts);
   document.getElementById('gk2aTime').textContent = gk2aTimestampStr + sourceLabel;
 
-  // 确保扫描角范围有效
-  if (!gk2aScanRange || !isFinite(gk2aScanRange.sxMin) || !isFinite(gk2aScanRange.sxMax)) {
-    gk2aScanRange = computeScanRange();
-  }
-  // 验证扫描角范围
-  if (!isFinite(gk2aScanRange.sxMin) || !isFinite(gk2aScanRange.sxMax)) {
-    console.warn('[GK2A] 扫描角范围无效, 跳过重投影');
-    gk2aScanRange = null;
+  // 初始化全圆盘扫描角范围 (固定值, 只需一次)
+  if (!gk2aScanRange) {
+    gk2aScanRange = getFullDiskScanRange();
+    console.log('[GK2A] 全圆盘扫描角范围已初始化');
   }
 
   // 尝试拼接并重投影: zoom 2 (16张, 2752x2752) → zoom 1 (4张, 1376x1376)
