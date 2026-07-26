@@ -11,29 +11,27 @@
   html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif; }
   #map { width: 100%; height: 100%; }
 
-  /* ===== 控制面板 ===== */
   .control-panel {
     position: absolute; top: 16px; right: 16px; z-index: 1000;
     background: rgba(15, 23, 42, 0.92); backdrop-filter: blur(16px);
     border: 1px solid rgba(255,255,255,0.1); border-radius: 14px;
-    padding: 16px; color: #e2e8f0; min-width: 260px; max-width: 310px;
+    padding: 16px; color: #e2e8f0; min-width: 270px; max-width: 320px;
     box-shadow: 0 8px 32px rgba(0,0,0,0.4);
     max-height: calc(100vh - 32px); overflow-y: auto;
   }
   @media (max-width: 480px) {
-    .control-panel { top: 8px; right: 8px; min-width: 240px; max-width: 280px; padding: 12px; font-size: 12px; }
+    .control-panel { top: 8px; right: 8px; min-width: 240px; max-width: 280px; padding: 12px; font-size: 11px; }
   }
 
   .panel-title {
     font-size: 16px; font-weight: 700; color: #f8fafc;
-    margin-bottom: 12px; display: flex; align-items: center; gap: 8px;
+    margin-bottom: 10px; display: flex; align-items: center; gap: 8px;
   }
   .panel-title::before {
     content: ''; display: inline-block; width: 4px; height: 18px;
     background: linear-gradient(180deg, #ef4444, #f97316); border-radius: 2px;
   }
 
-  /* 状态标签 */
   .status-badge {
     display: inline-flex; align-items: center; gap: 5px;
     font-size: 11px; padding: 3px 8px; border-radius: 10px; font-weight: 500;
@@ -46,42 +44,20 @@
   }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
 
-  /* 信息行 */
   .info-row {
     display: flex; justify-content: space-between; align-items: center;
-    padding: 5px 0; font-size: 12px; border-bottom: 1px solid rgba(255,255,255,0.06);
+    padding: 4px 0; font-size: 11px; border-bottom: 1px solid rgba(255,255,255,0.06);
   }
   .info-label { color: #94a3b8; }
-  .info-value { color: #f1f5f9; font-weight: 500; font-size: 12px; }
+  .info-value { color: #f1f5f9; font-weight: 500; font-size: 11px; }
 
-  /* 产品信息 */
-  .product-section {
-    margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.1);
-  }
   .section-label { font-size: 11px; color: #94a3b8; margin-bottom: 6px; }
 
-  .product-grid {
-    display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px;
-  }
-  .product-btn {
-    padding: 6px 3px; font-size: 10px; font-weight: 500; text-align: center;
-    border: 1px solid rgba(255,255,255,0.12); border-radius: 8px;
-    background: transparent; color: #94a3b8; cursor: pointer; transition: all 0.25s;
-    display: flex; flex-direction: column; align-items: center; gap: 2px; opacity: 0.6;
-  }
-  .product-btn.active {
-    background: rgba(99,102,241,0.2); border-color: #6366f1; color: #a5b4fc; opacity: 1;
-  }
-  .product-icon {
-    width: 24px; height: 24px; border-radius: 6px; display: flex;
-    align-items: center; justify-content: center; font-size: 12px;
-  }
-
-  /* 朝霞/晚霞分析 */
-  .fire-cloud-section {
+  /* 卫星云图叠加 */
+  .satellite-section {
     margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.1);
   }
-  .toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; }
+  .toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 6px 0; }
   .toggle-label { font-size: 12px; color: #cbd5e1; }
 
   .toggle-switch { position: relative; width: 40px; height: 22px; cursor: pointer; }
@@ -96,8 +72,8 @@
   .toggle-switch input:checked + .toggle-slider { background: linear-gradient(135deg, #3b82f6, #6366f1); }
   .toggle-switch input:checked + .toggle-slider::before { transform: translateX(18px); }
 
-  .opacity-section { margin-top: 8px; }
-  .opacity-section label { font-size: 11px; color: #94a3b8; display: block; margin-bottom: 4px; }
+  .opacity-section { margin-top: 6px; }
+  .opacity-section label { font-size: 10px; color: #94a3b8; display: block; margin-bottom: 3px; }
   .opacity-slider {
     width: 100%; -webkit-appearance: none; height: 4px; border-radius: 2px;
     background: #334155; outline: none;
@@ -107,7 +83,35 @@
     background: #3b82f6; cursor: pointer; box-shadow: 0 0 6px rgba(59,130,246,0.5);
   }
 
-  /* 模拟时间按钮 */
+  /* 产品 */
+  .product-grid {
+    display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px;
+  }
+  .product-btn {
+    padding: 6px 3px; font-size: 10px; font-weight: 500; text-align: center;
+    border: 1px solid rgba(255,255,255,0.12); border-radius: 8px;
+    background: transparent; color: #94a3b8; cursor: pointer; transition: all 0.25s;
+    display: flex; flex-direction: column; align-items: center; gap: 2px; opacity: 0.6;
+    position: relative; overflow: hidden;
+  }
+  .product-btn.active {
+    background: rgba(99,102,241,0.2); border-color: #6366f1; color: #a5b4fc; opacity: 1;
+  }
+  .product-btn.loading::after {
+    content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, transparent, #6366f1, transparent);
+    animation: loading-bar 1.2s infinite;
+  }
+  @keyframes loading-bar { 0%{transform:translateX(-100%)} 100%{transform:translateX(100%)} }
+  .product-icon {
+    width: 24px; height: 24px; border-radius: 6px; display: flex;
+    align-items: center; justify-content: center; font-size: 12px;
+  }
+
+  /* 火烧云 */
+  .fire-cloud-section {
+    margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.1);
+  }
   .sim-btns { display: flex; gap: 4px; margin-top: 6px; flex-wrap: wrap; }
   .sim-btn {
     flex: none; padding: 5px 8px; font-size: 10px; font-weight: 500;
@@ -122,7 +126,6 @@
   .sim-btn.now { color: #60a5fa; border-color: rgba(96,165,250,0.3); }
   .sim-btn.now.active { background: rgba(96,165,250,0.2); border-color: #60a5fa; }
 
-  /* 计算按钮 */
   .calc-btn {
     width: 100%; margin-top: 8px; padding: 8px; font-size: 12px; font-weight: 500;
     border: 1px solid rgba(255,69,0,0.3); border-radius: 8px;
@@ -132,7 +135,6 @@
   .calc-btn:active { transform: scale(0.97); }
   .calc-btn:disabled { opacity: 0.5; cursor: wait; }
 
-  /* 火烧云信息 */
   .fire-cloud-info {
     margin-top: 8px; padding: 8px; border-radius: 8px;
     background: rgba(255,69,0,0.08); border: 1px solid rgba(255,69,0,0.2);
@@ -143,7 +145,6 @@
   .fire-cloud-info .info-item { display: flex; justify-content: space-between; padding: 2px 0; }
   .fire-cloud-info .info-item span:last-child { color: #f8fafc; font-weight: 500; }
 
-  /* 火烧云图例 */
   .fire-cloud-legend { margin-top: 10px; display: none; }
   .fire-cloud-legend .legend-title { font-size: 11px; color: #94a3b8; margin-bottom: 6px; }
   .fire-cloud-bar {
@@ -162,7 +163,6 @@
   .fire-cloud-labels .morning-label { color: #fbbf24; }
   .fire-cloud-labels .evening-label { color: #f87171; }
 
-  /* 底图切换 */
   .basemap-section { margin-top: 10px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1); }
   .basemap-btns { display: flex; gap: 5px; }
   .basemap-btn {
@@ -172,7 +172,6 @@
   }
   .basemap-btn.active { background: rgba(59,130,246,0.2); border-color: #3b82f6; color: #60a5fa; }
 
-  /* 坐标显示 */
   .coord-display {
     position: absolute; bottom: 12px; left: 12px; z-index: 1000;
     background: rgba(15,23,42,0.85); backdrop-filter: blur(8px);
@@ -180,11 +179,9 @@
     font-family: 'Consolas', 'Monaco', monospace;
   }
 
-  /* Leaflet 控件 */
   .leaflet-control-zoom { border: 1px solid rgba(255,255,255,0.15) !important; }
   .leaflet-control-zoom a { background: rgba(15,23,42,0.85) !important; color: #e2e8f0 !important; border-color: rgba(255,255,255,0.1) !important; }
 
-  /* Toast */
   .toast {
     position: absolute; top: 20px; left: 50%; transform: translateX(-50%); z-index: 2000;
     background: rgba(15,23,42,0.95); backdrop-filter: blur(12px);
@@ -194,7 +191,6 @@
   }
   .toast.show { opacity: 1; }
 
-  /* 加载 */
   .loading-overlay {
     position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%); z-index: 2000;
     background: rgba(15,23,42,0.9); padding: 14px 20px; border-radius: 12px;
@@ -207,6 +203,15 @@
   .leaflet-popup-content-wrapper { background: rgba(15,23,42,0.95); color: #e2e8f0; border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; }
   .leaflet-popup-tip { background: rgba(15,23,42,0.95); }
   .leaflet-popup-close-button { color: #94a3b8 !important; }
+
+  /* 优化卫星图层渲染质量 */
+  .gk2a-overlay img { image-rendering: auto; }
+  .leaflet-tile { image-rendering: auto; }
+
+  /* 卫星状态指示 */
+  .sat-status { font-size: 10px; padding: 2px 6px; border-radius: 6px; display: inline-block; }
+  .sat-status.online { background: rgba(34,197,94,0.15); color: #4ade80; }
+  .sat-status.offline { background: rgba(239,68,68,0.15); color: #f87171; }
 </style>
 </head>
 <body>
@@ -218,17 +223,17 @@
     卫星云图
     <span class="status-badge live" id="statusBadge">
       <span class="status-dot"></span>
-      <span id="statusText">火烧云分析</span>
+      <span id="statusText">在线</span>
     </span>
   </div>
 
   <div class="info-row">
     <span class="info-label">卫星</span>
-    <span class="info-value">GEO-KOMPSAT-2A (128E)</span>
+    <span class="info-value">GK2A (128.2E) / VIIRS</span>
   </div>
   <div class="info-row">
-    <span class="info-label">产品</span>
-    <span class="info-value">ESRI 卫星底图</span>
+    <span class="info-label">实时数据</span>
+    <span class="info-value" id="satDate">加载中...</span>
   </div>
   <div class="info-row">
     <span class="info-label">北京时间</span>
@@ -239,38 +244,91 @@
     <span class="info-value" id="utcTime">--</span>
   </div>
 
-  <!-- 产品切换 -->
-  <div class="product-section">
-    <div class="section-label">卫星产品 (需后端服务)</div>
-    <div class="product-grid">
-      <button class="product-btn active">
-        <div class="product-icon" style="background:rgba(239,68,68,0.2)">🔴</div>
-        <span>红外亮温</span>
-      </button>
-      <button class="product-btn">
+  <!-- 卫星云图叠加 -->
+  <div class="satellite-section">
+    <div class="section-label">🛰️ 实时卫星云图叠加</div>
+    <div class="toggle-row">
+      <span class="toggle-label">🌍 真彩色影像</span>
+      <label class="toggle-switch">
+        <input type="checkbox" id="satTrueColorToggle" checked onchange="toggleSatLayer('trueColor')">
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+    <div class="opacity-section">
+      <label>不透明度: <span id="satTrueColorOpacityVal">65</span>%</label>
+      <input type="range" class="opacity-slider" id="satTrueColorOpacity" min="10" max="100" value="65" oninput="updateSatOpacity('trueColor', this.value)">
+    </div>
+    <div class="toggle-row">
+      <span class="toggle-label">🔴 红外亮温 (云检测)</span>
+      <label class="toggle-switch">
+        <input type="checkbox" id="satIRToggle" onchange="toggleSatLayer('ir')">
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+    <div class="opacity-section">
+      <label>不透明度: <span id="satIROpacityVal">40</span>%</label>
+      <input type="range" class="opacity-slider" id="satIROpacity" min="10" max="100" value="40" oninput="updateSatOpacity('ir', this.value)">
+    </div>
+    <button class="calc-btn" id="satRefreshBtn" onclick="refreshSatellite()" style="border-color:rgba(59,130,246,0.3);background:rgba(59,130,246,0.1);color:#60a5fa;margin-top:8px">
+      <span>🔄</span><span>刷新卫星云图</span>
+    </button>
+  </div>
+
+  <!-- GK2A 实时卫星云图 -->
+  <div class="satellite-section" style="border-top:1px solid rgba(255,255,255,0.1)">
+    <div class="section-label">🛰️ GK2A 实时卫星云图 (每10分钟更新)</div>
+    <div class="toggle-row">
+      <span class="toggle-label">显示 GK2A 实时云图</span>
+      <label class="toggle-switch">
+        <input type="checkbox" id="gk2aToggle" checked onchange="toggleGk2a()">
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+    <div class="opacity-section">
+      <label>不透明度: <span id="gk2aOpacityVal">70</span>%</label>
+      <input type="range" class="opacity-slider" id="gk2aOpacity" min="10" max="100" value="70" oninput="updateGk2aOpacity(this.value)">
+    </div>
+    <div class="info-row" style="margin-top:4px">
+      <span class="info-label">数据时间</span>
+      <span class="info-value" id="gk2aTime">加载中...</span>
+    </div>
+    <div class="info-row">
+      <span class="info-label">下次刷新</span>
+      <span class="info-value" id="gk2aNextRefresh">--</span>
+    </div>
+    <div class="section-label" style="margin-top:8px">卫星产品</div>
+    <div class="product-grid" id="gk2aProductGrid">
+      <button class="product-btn active" data-pid="geocolor" onclick="switchGk2aProduct('geocolor', this)">
         <div class="product-icon" style="background:rgba(34,197,94,0.2)">🌍</div>
         <span>真彩色</span>
       </button>
-      <button class="product-btn">
-        <div class="product-icon" style="background:rgba(168,85,247,0.2)">🟣</div>
-        <span>云顶增强</span>
+      <button class="product-btn" data-pid="band_13" onclick="switchGk2aProduct('band_13', this)">
+        <div class="product-icon" style="background:rgba(239,68,68,0.2)">🔴</div>
+        <span>红外亮温</span>
       </button>
-      <button class="product-btn">
+      <button class="product-btn" data-pid="band_02" onclick="switchGk2aProduct('band_02', this)">
         <div class="product-icon" style="background:rgba(250,204,21,0.2)">☀️</div>
         <span>可见光</span>
       </button>
-      <button class="product-btn">
+      <button class="product-btn" data-pid="band_08" onclick="switchGk2aProduct('band_08', this)">
         <div class="product-icon" style="background:rgba(56,189,248,0.2)">💧</div>
         <span>水汽</span>
       </button>
-      <button class="product-btn">
+      <button class="product-btn" data-pid="jma_day_cloud_phase_distinction_rgb" onclick="switchGk2aProduct('jma_day_cloud_phase_distinction_rgb', this)">
+        <div class="product-icon" style="background:rgba(168,85,247,0.2)">🟣</div>
+        <span>云顶增强</span>
+      </button>
+      <button class="product-btn" data-pid="eumetsat_nighttime_microphysics" onclick="switchGk2aProduct('eumetsat_nighttime_microphysics', this)">
         <div class="product-icon" style="background:rgba(99,102,241,0.2)">🌙</div>
         <span>夜间云</span>
       </button>
     </div>
+    <button class="calc-btn" id="gk2aRefreshBtn" onclick="refreshGk2a()" style="border-color:rgba(59,130,246,0.3);background:rgba(59,130,246,0.1);color:#60a5fa;margin-top:8px">
+      <span>🔄</span><span>刷新 GK2A 实时数据</span>
+    </button>
   </div>
 
-  <!-- 朝霞/晚霞分析 -->
+  <!-- 火烧云 -->
   <div class="fire-cloud-section">
     <div class="section-label">🌅 朝霞 / 晚霞 分析</div>
     <div class="toggle-row">
@@ -523,11 +581,11 @@ function computeFireCloud(utcHour, now) {
 
 // ===== 地图初始化 =====
 const map = L.map('map', {
-  center: [35, 105], zoom: 4, minZoom: 3, maxZoom: 8,
+  center: [35, 105], zoom: 4, minZoom: 3, maxZoom: 12,
   zoomControl: true, attributionControl: false
 });
 
-// 底图
+// ===== 底图层 =====
 const baseLayers = {
   sat: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
     maxZoom: 18, attribution: 'Esri'
@@ -548,6 +606,434 @@ function switchBase(type, btn) {
   currentBase = type;
   document.querySelectorAll('.basemap-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
+}
+
+// ===== 卫星云图叠加层 (NASA GIBS) =====
+// GIBS 提供全球近实时卫星影像, 免费无 API Key
+// 数据延迟约 3-6 小时, 使用当前日期前12小时确保数据可用
+
+function getGibsDate() {
+  const now = new Date();
+  // 使用12小时前的日期, 确保 GIBS 数据已生成
+  now.setHours(now.getHours() - 12);
+  return now.toISOString().slice(0, 10);
+}
+
+function createGibsLayer(layerName) {
+  const date = getGibsDate();
+  // VIIRS 真彩色/红外数据最高支持 Level 9 (250m分辨率)
+  // 使用 Level 9 作为 maxNativeZoom，Leaflet 会在更高 zoom 时自动拉伸瓦片
+  const tileMatrixSet = 'GoogleMapsCompatible_Level9';
+  return L.tileLayer(
+    `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${layerName}/default/${date}/${tileMatrixSet}/{z}/{y}/{x}.png`,
+    {
+      maxZoom: 14,
+      maxNativeZoom: 9,
+      minZoom: 1,
+      opacity: 0.65,
+      attribution: 'NASA GIBS/VIIRS',
+      errorTileUrl: '',
+      tileSize: 512,
+    }
+  );
+}
+
+// 真彩色卫星影像 (VIIRS NOAA-20)
+let satTrueColorLayer = createGibsLayer('VIIRS_NOAA20_CorrectedReflectance_TrueColor');
+satTrueColorLayer.setOpacity(0.65);
+satTrueColorLayer.addTo(map);
+
+// 红外亮温 (VIIRS Band I5, 11.5um) - 用于云检测
+let satIRLayer = createGibsLayer('VIIRS_NOAA20_Brightness_Temp_BandI5_Day');
+satIRLayer.setOpacity(0.0); // 默认不显示
+
+// 更新日期显示
+document.getElementById('satDate').textContent = getGibsDate();
+
+function refreshSatellite() {
+  const btn = document.getElementById('satRefreshBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner" style="width:12px;height:12px;border-color:rgba(96,165,250,0.3);border-top-color:#60a5fa"></span><span>刷新中...</span>';
+
+  const date = getGibsDate();
+  document.getElementById('satDate').textContent = date;
+
+  // 重建真彩色层
+  const tcVisible = document.getElementById('satTrueColorToggle').checked;
+  const tcOpacity = satTrueColorLayer.options.opacity;
+  map.removeLayer(satTrueColorLayer);
+  satTrueColorLayer = createGibsLayer('VIIRS_NOAA20_CorrectedReflectance_TrueColor');
+  satTrueColorLayer.setOpacity(tcOpacity);
+  if (tcVisible) satTrueColorLayer.addTo(map);
+
+  // 重建红外层
+  const irVisible = document.getElementById('satIRToggle').checked;
+  const irOpacity = satIRLayer.options.opacity;
+  map.removeLayer(satIRLayer);
+  satIRLayer = createGibsLayer('VIIRS_NOAA20_Brightness_Temp_BandI5_Day');
+  satIRLayer.setOpacity(irOpacity);
+  if (irVisible) satIRLayer.addTo(map);
+
+  showToast('卫星云图已刷新: ' + date);
+  setTimeout(() => {
+    btn.disabled = false;
+    btn.innerHTML = '<span>🔄</span><span>刷新卫星云图</span>';
+  }, 1000);
+}
+
+function toggleSatLayer(type) {
+  if (type === 'trueColor') {
+    const checked = document.getElementById('satTrueColorToggle').checked;
+    if (checked) {
+      satTrueColorLayer.addTo(map);
+    } else {
+      map.removeLayer(satTrueColorLayer);
+    }
+  } else if (type === 'ir') {
+    const checked = document.getElementById('satIRToggle').checked;
+    if (checked) {
+      satIRLayer.addTo(map);
+    } else {
+      map.removeLayer(satIRLayer);
+    }
+  }
+}
+
+function updateSatOpacity(type, val) {
+  if (type === 'trueColor') {
+    document.getElementById('satTrueColorOpacityVal').textContent = val;
+    satTrueColorLayer.setOpacity(val / 100);
+  } else if (type === 'ir') {
+    document.getElementById('satIROpacityVal').textContent = val;
+    satIRLayer.setOpacity(val / 100);
+  }
+}
+
+// ===== GK2A 实时卫星云图 (via CIRA SLIDER, 每10分钟更新) =====
+const GK2A_PRODUCTS = {
+  geocolor: { name: '真彩色', product: 'geocolor', desc: 'GeoColor 真彩色合成' },
+  band_13: { name: '红外亮温', product: 'band_13', desc: 'Band 13 IR (10.5μm)' },
+  band_02: { name: '可见光', product: 'band_02', desc: 'Band 02 可见光 (0.51μm)' },
+  band_08: { name: '水汽', product: 'band_08', desc: 'Band 08 水汽 (6.9μm)' },
+  jma_day_cloud_phase_distinction_rgb: { name: '云顶增强', product: 'jma_day_cloud_phase_distinction_rgb', desc: 'JMA 云相态区分 RGB' },
+  eumetsat_nighttime_microphysics: { name: '夜间云', product: 'eumetsat_nighttime_microphysics', desc: 'EUMETSAT 夜间微物理 RGB' },
+};
+
+// GK2A 全圆盘图像近似地理边界 (卫星位于 128.2°E, 0°N)
+// 地球圆盘半径约 81.3°, 图像含少许边距
+const GK2A_BOUNDS = [[-65, 45], [65, 212]];
+
+let gk2aCurrentProduct = 'geocolor';
+let gk2aLayer = null;
+let gk2aTimestamp = null;
+let gk2aTimestampStr = null;
+let gk2aRefreshTimer = null;
+let gk2aCountdownTimer = null;
+let gk2aNextRefreshTime = null;
+const GK2A_REFRESH_INTERVAL = 10 * 60 * 1000; // 10分钟
+
+// CORS 代理列表 (用于获取时间戳JSON)
+const CORS_PROXIES = [
+  (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+  (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+];
+
+// 带超时的 fetch
+function fetchWithTimeout(url, timeoutMs = 8000) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('timeout')), timeoutMs);
+    fetch(url).then(r => { clearTimeout(timer); resolve(r); }).catch(e => { clearTimeout(timer); reject(e); });
+  });
+}
+
+async function fetchGk2aTimestamp(product) {
+  const url = `https://slider.cira.colostate.edu/data/json/gk2a/full_disk/${product}/latest_times.json`;
+  for (const proxyFn of CORS_PROXIES) {
+    try {
+      const proxyUrl = proxyFn(url);
+      const resp = await fetchWithTimeout(proxyUrl, 6000);
+      if (!resp.ok) continue;
+      const data = await resp.json();
+      const timestamps = data.timestamps_int || [];
+      if (timestamps.length > 0) {
+        console.log(`[GK2A] 通过代理获取时间戳: ${timestamps[0]}`);
+        return String(timestamps[0]);
+      }
+    } catch (e) {
+      continue;
+    }
+  }
+  // 回退: 直接尝试 (可能被 CORS 阻止)
+  try {
+    const resp = await fetchWithTimeout(url, 4000);
+    if (resp.ok) {
+      const data = await resp.json();
+      const timestamps = data.timestamps_int || [];
+      if (timestamps.length > 0) {
+        console.log(`[GK2A] 直接获取时间戳: ${timestamps[0]}`);
+        return String(timestamps[0]);
+      }
+    }
+  } catch (e) {}
+  return null;
+}
+
+// 时间估算回退: 基于当前时间估算最新可用时间戳
+// SLIDER 每10分钟更新，处理延迟约20分钟
+function estimateGk2aTimestamp() {
+  const now = new Date();
+  // 减去20分钟处理延迟
+  now.setMinutes(now.getMinutes() - 20);
+  // 向下取整到最近的10分钟
+  const mins = now.getMinutes();
+  now.setMinutes(Math.floor(mins / 10) * 10, 0, 0);
+  // 格式: YYYYMMDDHHMM
+  const y = now.getUTCFullYear();
+  const m = String(now.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(now.getUTCDate()).padStart(2, '0');
+  const h = String(now.getUTCHours()).padStart(2, '0');
+  const mi = String(now.getUTCMinutes()).padStart(2, '0');
+  const ts = `${y}${m}${d}${h}${mi}`;
+  console.log(`[GK2A] 估算时间戳: ${ts}`);
+  return ts;
+}
+
+// GK2A 瓦片拼接: 每张瓦片 688x688, zoom 0=1张, zoom 1=4张(1376x1376), zoom 2=16张(2752x2752)
+const GK2A_TILE_SIZE = 688;
+
+function getGk2aTileUrl(product, timestamp, row, col, zoomLevel) {
+  const y = timestamp.slice(0, 4);
+  const m = timestamp.slice(4, 6);
+  const d = timestamp.slice(6, 8);
+  const zs = String(zoomLevel).padStart(2, '0');
+  const rs = String(row).padStart(3, '0');
+  const cs = String(col).padStart(3, '0');
+  return `https://slider.cira.colostate.edu/data/imagery/${y}/${m}/${d}/gk2a---full_disk/${product}/${timestamp}/${zs}/${rs}_${cs}.png`;
+}
+
+// 下载单张瓦片 (支持 CORS 代理回退)
+function downloadGk2aTile(url, useProxy = false) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => resolve(img);
+    img.onerror = () => {
+      // 如果直接下载失败且未使用代理，尝试通过 CORS 代理
+      if (!useProxy) {
+        console.log('[GK2A] 直接下载失败，尝试 CORS 代理:', url.substring(0, 80));
+        const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
+        downloadGk2aTile(proxyUrl, true).then(resolve);
+      } else {
+        resolve(null);
+      }
+    };
+    img.src = url;
+    // 8秒超时
+    setTimeout(() => { if (!img.complete) resolve(null); }, 8000);
+  });
+}
+
+// 拼接所有瓦片为高分辨率全圆盘图像
+async function stitchGk2aTiles(product, timestamp, zoomLevel) {
+  const grid = 2 ** zoomLevel; // zoom 2 = 4x4, zoom 1 = 2x2
+  const tileSize = 688;
+  const totalW = grid * tileSize;
+  const totalH = grid * tileSize;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = totalW;
+  canvas.height = totalH;
+  const ctx = canvas.getContext('2d');
+
+  // 黑色背景
+  ctx.fillStyle = '#000000';
+  ctx.fillRect(0, 0, totalW, totalH);
+
+  // 并行下载所有瓦片
+  const promises = [];
+  for (let row = 0; row < grid; row++) {
+    for (let col = 0; col < grid; col++) {
+      const url = getGk2aTileUrl(product, timestamp, row, col, zoomLevel);
+      promises.push(
+        downloadGk2aTile(url).then(img => ({ row, col, img }))
+      );
+    }
+  }
+
+  const results = await Promise.all(promises);
+  let loadedCount = 0;
+  for (const { row, col, img } of results) {
+    if (img) {
+      try {
+        ctx.drawImage(img, col * tileSize, row * tileSize);
+        loadedCount++;
+      } catch (e) {
+        // canvas 被污染 (CORS 问题)，跳过此瓦片
+        console.warn('[GK2A] 瓦片绘制失败 (CORS 污染):', e.message);
+      }
+    }
+  }
+  console.log(`[GK2A] 拼接完成 (zoom ${zoomLevel}): ${loadedCount}/${results.length} 瓦片, 分辨率 ${totalW}x${totalH}`);
+
+  // 如果加载的瓦片太少，返回 null
+  if (loadedCount < results.length * 0.3) return null;
+
+  // 尝试导出为 data URL (如果 canvas 被污染会抛出异常)
+  try {
+    return canvas.toDataURL('image/png');
+  } catch (e) {
+    console.warn('[GK2A] toDataURL 失败 (canvas 被污染):', e.message);
+    return null;
+  }
+}
+
+function getGk2aImageUrl(product, timestamp) {
+  // 回退用: 低分辨率单瓦片
+  const y = timestamp.slice(0, 4);
+  const m = timestamp.slice(4, 6);
+  const d = timestamp.slice(6, 8);
+  return `https://slider.cira.colostate.edu/data/imagery/${y}/${m}/${d}/gk2a---full_disk/${product}/${timestamp}/00/000_000.png`;
+}
+
+function formatGk2aTime(ts) {
+  if (!ts || ts.length < 12) return '--';
+  const y = ts.slice(0, 4), mo = ts.slice(4, 6), d = ts.slice(6, 8);
+  const h = ts.slice(8, 10), mi = ts.slice(10, 12);
+  const bjH = (parseInt(h) + 8) % 24;
+  return `${y}-${mo}-${d} ${h}:${mi} UTC / ${String(bjH).padStart(2,'0')}:${mi} 北京`;
+}
+
+async function loadGk2aLayer(product, btn) {
+  if (btn) {
+    btn.classList.add('loading');
+  }
+  document.getElementById('gk2aTime').textContent = '获取中...';
+
+  const prod = GK2A_PRODUCTS[product];
+  if (!prod) return;
+
+  let ts = await fetchGk2aTimestamp(prod.product);
+  let sourceLabel = '';
+  if (!ts) {
+    // 回退: 使用时间估算
+    ts = estimateGk2aTimestamp();
+    sourceLabel = ' (估算)';
+    console.log('[GK2A] 使用估算时间戳回退');
+  }
+
+  gk2aTimestamp = ts;
+  gk2aTimestampStr = formatGk2aTime(ts);
+  document.getElementById('gk2aTime').textContent = gk2aTimestampStr + sourceLabel;
+
+  // 尝试拼接高分辨率瓦片: 先试 zoom 2 (4x4=16张, 2752x2752), 不行试 zoom 1 (2x2=4张, 1376x1376)
+  let imgUrl = null;
+  let usedZoom = 0;
+  for (const tryZoom of [2, 1]) {
+    imgUrl = await stitchGk2aTiles(prod.product, ts, tryZoom);
+    if (imgUrl) {
+      usedZoom = tryZoom;
+      console.log(`[GK2A] 使用 zoom ${tryZoom} 高分辨率拼接图像`);
+      break;
+    }
+    console.log(`[GK2A] zoom ${tryZoom} 拼接失败, 尝试下一级别`);
+  }
+  if (!imgUrl) {
+    // 最终回退: 低分辨率单瓦片 (zoom 0, 688x688)
+    console.log('[GK2A] 所有拼接失败, 回退到低分辨率单瓦片');
+    imgUrl = getGk2aImageUrl(prod.product, ts);
+    sourceLabel = sourceLabel || ' (低分辨率)';
+  } else {
+    sourceLabel = sourceLabel || ` (${usedZoom === 2 ? '高' : '中'}分辨率)`;
+  }
+
+  // 移除旧图层
+  if (gk2aLayer) {
+    map.removeLayer(gk2aLayer);
+    gk2aLayer = null;
+  }
+
+  // 创建新图层
+  gk2aLayer = L.imageOverlay(imgUrl, GK2A_BOUNDS, {
+    opacity: document.getElementById('gk2aOpacity').value / 100,
+    attribution: `GK2A / CIRA SLIDER`,
+    className: 'gk2a-overlay',
+    errorOverlayUrl: '',
+  });
+
+  if (document.getElementById('gk2aToggle').checked) {
+    gk2aLayer.addTo(map);
+  }
+
+  // 更新产品按钮状态
+  document.querySelectorAll('#gk2aProductGrid .product-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  else {
+    const activeBtn = document.querySelector(`#gk2aProductGrid .product-btn[data-pid="${product}"]`);
+    if (activeBtn) activeBtn.classList.add('active');
+  }
+
+  gk2aCurrentProduct = product;
+
+  // 更新卫星信息
+  document.getElementById('satDate').textContent = gk2aTimestampStr;
+
+  if (btn) btn.classList.remove('loading');
+  showToast(`GK2A ${prod.name} 加载完成: ${gk2aTimestampStr}`);
+
+  // 安排下次自动刷新
+  scheduleGk2aRefresh();
+}
+
+function scheduleGk2aRefresh() {
+  if (gk2aRefreshTimer) clearTimeout(gk2aRefreshTimer);
+  if (gk2aCountdownTimer) clearInterval(gk2aCountdownTimer);
+  gk2aNextRefreshTime = Date.now() + GK2A_REFRESH_INTERVAL;
+
+  gk2aRefreshTimer = setTimeout(() => {
+    loadGk2aLayer(gk2aCurrentProduct);
+  }, GK2A_REFRESH_INTERVAL);
+
+  gk2aCountdownTimer = setInterval(() => {
+    const remaining = gk2aNextRefreshTime - Date.now();
+    if (remaining <= 0) {
+      document.getElementById('gk2aNextRefresh').textContent = '刷新中...';
+      clearInterval(gk2aCountdownTimer);
+    } else {
+      const min = Math.floor(remaining / 60000);
+      const sec = Math.floor((remaining % 60000) / 1000);
+      document.getElementById('gk2aNextRefresh').textContent = `${min}分${sec}秒`;
+    }
+  }, 1000);
+}
+
+async function switchGk2aProduct(pid, btn) {
+  if (pid === gk2aCurrentProduct) return;
+  await loadGk2aLayer(pid, btn);
+}
+
+async function refreshGk2a() {
+  const btn = document.getElementById('gk2aRefreshBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner" style="width:12px;height:12px;border-color:rgba(96,165,250,0.3);border-top-color:#60a5fa"></span><span>刷新中...</span>';
+  await loadGk2aLayer(gk2aCurrentProduct);
+  btn.disabled = false;
+  btn.innerHTML = '<span>🔄</span><span>刷新 GK2A 实时数据</span>';
+}
+
+function toggleGk2a() {
+  const checked = document.getElementById('gk2aToggle').checked;
+  if (checked && gk2aLayer) {
+    gk2aLayer.addTo(map);
+  } else if (gk2aLayer) {
+    map.removeLayer(gk2aLayer);
+  }
+}
+
+function updateGk2aOpacity(val) {
+  document.getElementById('gk2aOpacityVal').textContent = val;
+  if (gk2aLayer) {
+    gk2aLayer.setOpacity(val / 100);
+  }
 }
 
 // ===== 火烧云图层 =====
@@ -778,6 +1264,9 @@ function updateTimeDisplay() {
 
 // ===== 初始化 =====
 setTimeout(() => {
+  // 加载 GK2A 实时卫星云图
+  loadGk2aLayer('geocolor');
+  // 计算初始火烧云
   simCalc(20.8);
   updateTimeDisplay();
   setInterval(updateTimeDisplay, 30000);
