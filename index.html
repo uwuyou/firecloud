@@ -3,132 +3,331 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>火烧云预报 - 卫星云图</title>
+<title>卫星云图 - 火烧云预报</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
-*{margin:0;padding:0;box-sizing:border-box}
-html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif;background:#0f172a}
-#map{width:100%;height:100%}
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif; }
+  #map { width: 100%; height: 100%; }
 
-/* 底部控制栏 */
-.bottom-bar{
-  position:fixed;bottom:0;left:0;right:0;z-index:1000;
-  background:rgba(15,23,42,0.94);backdrop-filter:blur(16px);
-  border-top:1px solid rgba(255,255,255,0.1);
-  padding:12px 16px calc(12px + env(safe-area-inset-bottom));
-  display:flex;flex-direction:column;gap:8px;
-}
-.bar-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.bar-label{font-size:11px;color:#94a3b8;white-space:nowrap}
+  /* ===== 控制面板 ===== */
+  .control-panel {
+    position: absolute; top: 16px; right: 16px; z-index: 1000;
+    background: rgba(15, 23, 42, 0.92); backdrop-filter: blur(16px);
+    border: 1px solid rgba(255,255,255,0.1); border-radius: 14px;
+    padding: 16px; color: #e2e8f0; min-width: 260px; max-width: 310px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    max-height: calc(100vh - 32px); overflow-y: auto;
+  }
+  @media (max-width: 480px) {
+    .control-panel { top: 8px; right: 8px; min-width: 240px; max-width: 280px; padding: 12px; font-size: 12px; }
+  }
 
-/* 状态标签 */
-.status-tag{
-  font-size:11px;padding:4px 10px;border-radius:12px;font-weight:600;
-  display:inline-flex;align-items:center;gap:4px;
-}
-.status-tag.live{background:rgba(34,197,94,0.15);color:#4ade80;border:1px solid rgba(34,197,94,0.3)}
-.status-tag.no{background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.3)}
-.dot{width:6px;height:6px;border-radius:50%;background:currentColor;animation:pulse 2s infinite}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+  .panel-title {
+    font-size: 16px; font-weight: 700; color: #f8fafc;
+    margin-bottom: 12px; display: flex; align-items: center; gap: 8px;
+  }
+  .panel-title::before {
+    content: ''; display: inline-block; width: 4px; height: 18px;
+    background: linear-gradient(180deg, #ef4444, #f97316); border-radius: 2px;
+  }
 
-/* 按钮 */
-.btn{
-  padding:8px 14px;font-size:12px;font-weight:600;border-radius:8px;
-  border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.06);
-  color:#cbd5e1;cursor:pointer;transition:all 0.2s;white-space:nowrap;
-  display:inline-flex;align-items:center;gap:4px;
-}
-.btn:active{transform:scale(0.96)}
-.btn.active{background:rgba(251,146,60,0.2);border-color:#fb923c;color:#fb923c}
-.btn-morning{color:#fbbf24;border-color:rgba(251,191,36,0.3)}
-.btn-morning.active{background:rgba(251,191,36,0.2);border-color:#fbbf24}
-.btn-evening{color:#f87171;border-color:rgba(248,113,113,0.3)}
-.btn-evening.active{background:rgba(248,113,113,0.2);border-color:#f87171}
+  /* 状态标签 */
+  .status-badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 11px; padding: 3px 8px; border-radius: 10px; font-weight: 500;
+  }
+  .status-badge.live { background: rgba(34,197,94,0.15); color: #4ade80; border: 1px solid rgba(34,197,94,0.3); }
+  .status-badge.no { background: rgba(239,68,68,0.15); color: #f87171; border: 1px solid rgba(239,68,68,0.3); }
+  .status-badge.loading { background: rgba(251,191,36,0.15); color: #fbbf24; border: 1px solid rgba(251,191,36,0.3); }
+  .status-dot {
+    width: 6px; height: 6px; border-radius: 50%; background: currentColor; animation: pulse 2s infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
 
-/* 信息面板 */
-.info-panel{
-  position:fixed;top:12px;right:12px;z-index:1000;max-width:260px;
-  background:rgba(15,23,42,0.9);backdrop-filter:blur(12px);
-  border:1px solid rgba(255,255,255,0.1);border-radius:12px;
-  padding:14px;color:#e2e8f0;font-size:12px;
-  box-shadow:0 4px 20px rgba(0,0,0,0.4);
-  display:none;
-}
-.info-panel.show{display:block}
-.info-panel .title{font-size:14px;font-weight:700;color:#fb923c;margin-bottom:8px}
-.info-panel .row{display:flex;justify-content:space-between;padding:3px 0;color:#94a3b8}
-.info-panel .row .val{color:#f1f5f9;font-weight:500}
-.info-panel .formula{font-size:10px;color:#64748b;margin-top:6px;line-height:1.5}
+  /* 信息行 */
+  .info-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 5px 0; font-size: 12px; border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  .info-label { color: #94a3b8; }
+  .info-value { color: #f1f5f9; font-weight: 500; font-size: 12px; }
 
-/* 图例 */
-.legend-bar{
-  display:flex;height:8px;border-radius:4px;overflow:hidden;margin-top:8px;
-}
-.legend-bar .morning{flex:1;background:linear-gradient(to right,rgba(255,180,80,0.3),rgba(255,100,40,0.8))}
-.legend-bar .evening{flex:1;background:linear-gradient(to left,rgba(180,60,120,0.3),rgba(200,30,30,0.8))}
-.legend-labels{display:flex;justify-content:space-between;font-size:10px;color:#64748b;margin-top:2px}
+  /* 产品信息 */
+  .product-section {
+    margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.1);
+  }
+  .section-label { font-size: 11px; color: #94a3b8; margin-bottom: 6px; }
 
-/* 移动端适配 */
-@media (max-width:480px){
-  .info-panel{top:8px;right:8px;max-width:220px;padding:10px;font-size:11px}
-  .btn{padding:6px 10px;font-size:11px}
-  .bar-row{gap:4px}
-}
+  .product-grid {
+    display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px;
+  }
+  .product-btn {
+    padding: 6px 3px; font-size: 10px; font-weight: 500; text-align: center;
+    border: 1px solid rgba(255,255,255,0.12); border-radius: 8px;
+    background: transparent; color: #94a3b8; cursor: pointer; transition: all 0.25s;
+    display: flex; flex-direction: column; align-items: center; gap: 2px; opacity: 0.6;
+  }
+  .product-btn.active {
+    background: rgba(99,102,241,0.2); border-color: #6366f1; color: #a5b4fc; opacity: 1;
+  }
+  .product-icon {
+    width: 24px; height: 24px; border-radius: 6px; display: flex;
+    align-items: center; justify-content: center; font-size: 12px;
+  }
 
-/* Leaflet 控件 */
-.leaflet-control-zoom{border:1px solid rgba(255,255,255,0.15)!important}
-.leaflet-control-zoom a{background:rgba(15,23,42,0.85)!important;color:#e2e8f0!important;border-color:rgba(255,255,255,0.1)!important}
+  /* 朝霞/晚霞分析 */
+  .fire-cloud-section {
+    margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.1);
+  }
+  .toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; }
+  .toggle-label { font-size: 12px; color: #cbd5e1; }
 
-/* 加载指示器 */
-.loading-overlay{
-  position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:2000;
-  background:rgba(15,23,42,0.9);padding:16px 24px;border-radius:12px;
-  color:#fbbf24;font-size:14px;display:none;align-items:center;gap:8px;
-}
-.loading-overlay.show{display:flex}
-.spinner{width:18px;height:18px;border:2px solid rgba(251,191,36,0.3);border-top-color:#fbbf24;border-radius:50%;animation:spin 1s linear infinite}
-@keyframes spin{to{transform:rotate(360deg)}}
+  .toggle-switch { position: relative; width: 40px; height: 22px; cursor: pointer; }
+  .toggle-switch input { opacity: 0; width: 0; height: 0; }
+  .toggle-slider {
+    position: absolute; inset: 0; background: #334155; border-radius: 11px; transition: 0.3s;
+  }
+  .toggle-slider::before {
+    content: ''; position: absolute; width: 16px; height: 16px; left: 3px; top: 3px;
+    background: #fff; border-radius: 50%; transition: 0.3s;
+  }
+  .toggle-switch input:checked + .toggle-slider { background: linear-gradient(135deg, #3b82f6, #6366f1); }
+  .toggle-switch input:checked + .toggle-slider::before { transform: translateX(18px); }
+
+  .opacity-section { margin-top: 8px; }
+  .opacity-section label { font-size: 11px; color: #94a3b8; display: block; margin-bottom: 4px; }
+  .opacity-slider {
+    width: 100%; -webkit-appearance: none; height: 4px; border-radius: 2px;
+    background: #334155; outline: none;
+  }
+  .opacity-slider::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%;
+    background: #3b82f6; cursor: pointer; box-shadow: 0 0 6px rgba(59,130,246,0.5);
+  }
+
+  /* 模拟时间按钮 */
+  .sim-btns { display: flex; gap: 4px; margin-top: 6px; flex-wrap: wrap; }
+  .sim-btn {
+    flex: none; padding: 5px 8px; font-size: 10px; font-weight: 500;
+    border: 1px solid rgba(255,255,255,0.15); border-radius: 6px;
+    background: transparent; color: #94a3b8; cursor: pointer; transition: all 0.2s; text-align: center;
+  }
+  .sim-btn:active { transform: scale(0.96); }
+  .sim-btn.morning { color: #fbbf24; border-color: rgba(251,191,36,0.3); }
+  .sim-btn.morning.active { background: rgba(251,191,36,0.2); border-color: #fbbf24; }
+  .sim-btn.evening { color: #f87171; border-color: rgba(248,113,113,0.3); }
+  .sim-btn.evening.active { background: rgba(248,113,113,0.2); border-color: #f87171; }
+  .sim-btn.now { color: #60a5fa; border-color: rgba(96,165,250,0.3); }
+  .sim-btn.now.active { background: rgba(96,165,250,0.2); border-color: #60a5fa; }
+
+  /* 计算按钮 */
+  .calc-btn {
+    width: 100%; margin-top: 8px; padding: 8px; font-size: 12px; font-weight: 500;
+    border: 1px solid rgba(255,69,0,0.3); border-radius: 8px;
+    background: rgba(255,69,0,0.1); color: #fb923c; cursor: pointer;
+    transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 6px;
+  }
+  .calc-btn:active { transform: scale(0.97); }
+  .calc-btn:disabled { opacity: 0.5; cursor: wait; }
+
+  /* 火烧云信息 */
+  .fire-cloud-info {
+    margin-top: 8px; padding: 8px; border-radius: 8px;
+    background: rgba(255,69,0,0.08); border: 1px solid rgba(255,69,0,0.2);
+    font-size: 11px; color: #fbbf24; line-height: 1.6;
+    display: none;
+  }
+  .fire-cloud-info.visible { display: block; }
+  .fire-cloud-info .info-item { display: flex; justify-content: space-between; padding: 2px 0; }
+  .fire-cloud-info .info-item span:last-child { color: #f8fafc; font-weight: 500; }
+
+  /* 火烧云图例 */
+  .fire-cloud-legend { margin-top: 10px; display: none; }
+  .fire-cloud-legend .legend-title { font-size: 11px; color: #94a3b8; margin-bottom: 6px; }
+  .fire-cloud-bar {
+    height: 12px; border-radius: 3px; margin-bottom: 3px;
+    display: flex; overflow: hidden;
+  }
+  .fire-cloud-bar .bar-morning {
+    flex: 1;
+    background: linear-gradient(to right, rgba(255,180,80,0.2) 0%, rgba(255,140,60,0.5) 40%, rgba(255,100,40,0.7) 100%);
+  }
+  .fire-cloud-bar .bar-evening {
+    flex: 1;
+    background: linear-gradient(to left, rgba(180,60,120,0.2) 0%, rgba(220,50,80,0.5) 40%, rgba(200,30,30,0.7) 100%);
+  }
+  .fire-cloud-labels { display: flex; justify-content: space-between; font-size: 9px; color: #64748b; }
+  .fire-cloud-labels .morning-label { color: #fbbf24; }
+  .fire-cloud-labels .evening-label { color: #f87171; }
+
+  /* 底图切换 */
+  .basemap-section { margin-top: 10px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1); }
+  .basemap-btns { display: flex; gap: 5px; }
+  .basemap-btn {
+    flex: 1; padding: 5px 3px; font-size: 10px;
+    border: 1px solid rgba(255,255,255,0.15); border-radius: 6px;
+    background: transparent; color: #94a3b8; cursor: pointer; transition: all 0.2s; text-align: center;
+  }
+  .basemap-btn.active { background: rgba(59,130,246,0.2); border-color: #3b82f6; color: #60a5fa; }
+
+  /* 坐标显示 */
+  .coord-display {
+    position: absolute; bottom: 12px; left: 12px; z-index: 1000;
+    background: rgba(15,23,42,0.85); backdrop-filter: blur(8px);
+    padding: 5px 10px; border-radius: 8px; font-size: 11px; color: #94a3b8;
+    font-family: 'Consolas', 'Monaco', monospace;
+  }
+
+  /* Leaflet 控件 */
+  .leaflet-control-zoom { border: 1px solid rgba(255,255,255,0.15) !important; }
+  .leaflet-control-zoom a { background: rgba(15,23,42,0.85) !important; color: #e2e8f0 !important; border-color: rgba(255,255,255,0.1) !important; }
+
+  /* Toast */
+  .toast {
+    position: absolute; top: 20px; left: 50%; transform: translateX(-50%); z-index: 2000;
+    background: rgba(15,23,42,0.95); backdrop-filter: blur(12px);
+    border: 1px solid rgba(251,191,36,0.3); border-radius: 10px;
+    padding: 8px 16px; color: #fbbf24; font-size: 12px;
+    opacity: 0; transition: opacity 0.3s; pointer-events: none;
+  }
+  .toast.show { opacity: 1; }
+
+  /* 加载 */
+  .loading-overlay {
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%); z-index: 2000;
+    background: rgba(15,23,42,0.9); padding: 14px 20px; border-radius: 12px;
+    color: #fbbf24; font-size: 13px; display: none; align-items: center; gap: 8px;
+  }
+  .loading-overlay.show { display: flex; }
+  .spinner { width: 16px; height: 16px; border: 2px solid rgba(251,191,36,0.3); border-top-color: #fbbf24; border-radius: 50%; animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .leaflet-popup-content-wrapper { background: rgba(15,23,42,0.95); color: #e2e8f0; border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; }
+  .leaflet-popup-tip { background: rgba(15,23,42,0.95); }
+  .leaflet-popup-close-button { color: #94a3b8 !important; }
 </style>
 </head>
 <body>
 
 <div id="map"></div>
 
-<div class="info-panel" id="infoPanel">
-  <div class="title" id="infoTitle">朝霞 / 晚霞 分析</div>
-  <div class="row"><span>UTC时间</span><span class="val" id="infoUtc">--</span></div>
-  <div class="row"><span>北京时间</span><span class="val" id="infoBj">--</span></div>
-  <div class="row"><span>🌅 朝霞</span><span class="val" style="color:#fbbf24" id="infoMorning">--</span></div>
-  <div class="row"><span>🌇 晚霞</span><span class="val" style="color:#f87171" id="infoEvening">--</span></div>
-  <div class="row"><span>太阳赤纬</span><span class="val" id="infoDecl">--</span></div>
-  <div class="formula">
-    D ≈ √(2·R·h), R=6371km<br>
-    T ≈ 2D/v_sunset<br>
-    v ≈ 18~21 km/min
+<div class="control-panel">
+  <div class="panel-title">
+    卫星云图
+    <span class="status-badge live" id="statusBadge">
+      <span class="status-dot"></span>
+      <span id="statusText">火烧云分析</span>
+    </span>
   </div>
-  <div class="legend-bar"><div class="morning"></div><div class="evening"></div></div>
-  <div class="legend-labels"><span>🌅 朝霞 (日出前)</span><span>🌇 晚霞 (日落后)</span></div>
+
+  <div class="info-row">
+    <span class="info-label">卫星</span>
+    <span class="info-value">GEO-KOMPSAT-2A (128E)</span>
+  </div>
+  <div class="info-row">
+    <span class="info-label">产品</span>
+    <span class="info-value">ESRI 卫星底图</span>
+  </div>
+  <div class="info-row">
+    <span class="info-label">北京时间</span>
+    <span class="info-value" id="bjTime">--</span>
+  </div>
+  <div class="info-row">
+    <span class="info-label">UTC时间</span>
+    <span class="info-value" id="utcTime">--</span>
+  </div>
+
+  <!-- 产品切换 -->
+  <div class="product-section">
+    <div class="section-label">卫星产品 (需后端服务)</div>
+    <div class="product-grid">
+      <button class="product-btn active">
+        <div class="product-icon" style="background:rgba(239,68,68,0.2)">🔴</div>
+        <span>红外亮温</span>
+      </button>
+      <button class="product-btn">
+        <div class="product-icon" style="background:rgba(34,197,94,0.2)">🌍</div>
+        <span>真彩色</span>
+      </button>
+      <button class="product-btn">
+        <div class="product-icon" style="background:rgba(168,85,247,0.2)">🟣</div>
+        <span>云顶增强</span>
+      </button>
+      <button class="product-btn">
+        <div class="product-icon" style="background:rgba(250,204,21,0.2)">☀️</div>
+        <span>可见光</span>
+      </button>
+      <button class="product-btn">
+        <div class="product-icon" style="background:rgba(56,189,248,0.2)">💧</div>
+        <span>水汽</span>
+      </button>
+      <button class="product-btn">
+        <div class="product-icon" style="background:rgba(99,102,241,0.2)">🌙</div>
+        <span>夜间云</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- 朝霞/晚霞分析 -->
+  <div class="fire-cloud-section">
+    <div class="section-label">🌅 朝霞 / 晚霞 分析</div>
+    <div class="toggle-row">
+      <span class="toggle-label" style="color:#fbbf24">显示朝霞晚霞范围</span>
+      <label class="toggle-switch">
+        <input type="checkbox" id="fireCloudToggle" onchange="toggleFireCloud()">
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+    <div class="opacity-section">
+      <label>覆盖不透明度: <span id="fcOpacityVal">50</span>%</label>
+      <input type="range" class="opacity-slider" id="fcOpacity" min="10" max="100" value="50" oninput="updateFireCloudOpacity(this.value)">
+    </div>
+    <button class="calc-btn" id="fcCalcBtn" onclick="calculateFireCloud()">
+      <span>🌅</span><span>计算朝霞晚霞范围</span>
+    </button>
+    <div style="margin-top:6px">
+      <label style="font-size:10px;color:#94a3b8;">模拟时间 (UTC):</label>
+      <div class="sim-btns">
+        <button class="sim-btn morning active" onclick="simCalc(20.8)">04:48 朝霞</button>
+        <button class="sim-btn morning" onclick="simCalc(21.0)">05:00 朝霞</button>
+        <button class="sim-btn evening" onclick="simCalc(11.0)">19:00 晚霞</button>
+        <button class="sim-btn evening" onclick="simCalc(11.5)">19:30 晚霞</button>
+        <button class="sim-btn now" onclick="simCalc(-1)">实际时间</button>
+      </div>
+    </div>
+    <div class="fire-cloud-info" id="fireCloudInfo"></div>
+    <div class="fire-cloud-legend" id="fireCloudLegend">
+      <div class="legend-title">朝霞 / 晚霞 强度</div>
+      <div class="fire-cloud-bar">
+        <div class="bar-morning"></div>
+        <div class="bar-evening"></div>
+      </div>
+      <div class="fire-cloud-labels">
+        <span class="morning-label">← 朝霞 (日出前)</span>
+        <span style="color:#64748b">低</span>
+        <span class="evening-label">晚霞 (日落后) →</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 底图 -->
+  <div class="basemap-section">
+    <div class="toggle-label" style="margin-bottom:6px;font-size:11px">底图切换</div>
+    <div class="basemap-btns">
+      <button class="basemap-btn active" onclick="switchBase('sat', this)">卫星</button>
+      <button class="basemap-btn" onclick="switchBase('std', this)">标准</button>
+      <button class="basemap-btn" onclick="switchBase('dark', this)">暗色</button>
+    </div>
+  </div>
 </div>
 
+<div class="coord-display" id="coordDisplay">--.--N, --.--E</div>
+<div class="toast" id="toast"></div>
 <div class="loading-overlay" id="loadingOverlay">
   <div class="spinner"></div>
   <span>计算火烧云...</span>
-</div>
-
-<div class="bottom-bar">
-  <div class="bar-row" style="justify-content:space-between">
-    <span class="status-tag live" id="statusTag"><span class="dot"></span><span id="statusText">实时</span></span>
-    <span style="font-size:11px;color:#64748b" id="timeDisplay">--</span>
-  </div>
-  <div class="bar-row">
-    <span class="bar-label">模拟时间:</span>
-    <button class="btn btn-morning active" onclick="simCalc(20.8)" title="UTC 20:48 = 北京 04:48">04:48 朝霞</button>
-    <button class="btn btn-morning" onclick="simCalc(21.0)" title="UTC 21:00 = 北京 05:00">05:00 朝霞</button>
-    <button class="btn btn-evening" onclick="simCalc(11.0)" title="UTC 11:00 = 北京 19:00">19:00 晚霞</button>
-    <button class="btn btn-evening" onclick="simCalc(11.5)" title="UTC 11:30 = 北京 19:30">19:30 晚霞</button>
-    <button class="btn" onclick="simCalc(-1)" title="使用当前实际时间">现在</button>
-  </div>
 </div>
 
 <script>
@@ -197,20 +396,7 @@ function solarAzimuth(lat, dec, hourUtc, lon) {
   return az;
 }
 
-// 估算云底高度 (基于纬度/季节的粗略估算)
-function estimateCloudBase(lat, month) {
-  // 中纬度地区云底通常在 1-8km
-  // 低纬度地区云底较高
-  const absLat = Math.abs(lat);
-  if (absLat < 20) return 2.0 + Math.random() * 4.0;   // 热带 2-6km
-  if (absLat < 35) return 1.5 + Math.random() * 5.0;   // 亚热带 1.5-6.5km
-  if (absLat < 45) return 1.0 + Math.random() * 4.5;   // 温带 1-5.5km
-  return 0.8 + Math.random() * 3.5;                      // 寒温带 0.8-4.3km
-}
-
-// 基于经纬度的确定性伪随机云底高度
 function gridCloudBase(lat, lon) {
-  // 使用经纬度作为种子，产生稳定的云底高度
   const seed = Math.sin(lat * 127.1 + lon * 311.7) * 43758.5453;
   const rand = seed - Math.floor(seed);
   const absLat = Math.abs(lat);
@@ -249,7 +435,6 @@ function computeFireCloud(utcHour, now) {
       let ssUtc = sunsetTimeUtc(lat, lon, dec);
       let srUtc = sunriseTimeUtc(lat, lon, dec);
 
-      // 标准化时间
       while (ssUtc < 0) ssUtc += 24;
       while (srUtc < 0) srUtc += 24;
       const effHour = ((utcHour % 24) + 24) % 24;
@@ -264,7 +449,6 @@ function computeFireCloud(utcHour, now) {
 
       let isMorning = false, isEvening = false, score = 0, sunAz = 0;
 
-      // 朝霞: 日出前
       if (dtSR < 0) {
         const dtBefore = Math.abs(dtSR);
         if (dtBefore <= fireDuration + 5) {
@@ -275,7 +459,6 @@ function computeFireCloud(utcHour, now) {
         }
       }
 
-      // 晚霞: 日落后
       if (!isMorning && dtSS >= 0) {
         if (dtSS <= fireDuration + 5) {
           isEvening = true;
@@ -317,8 +500,8 @@ function computeFireCloud(utcHour, now) {
     }
   }
 
-  const simH = Math.floor(((effHour % 24) + 24) % 24);
-  const simM = Math.floor((effHour - Math.floor(effHour)) * 60);
+  const simH = Math.floor(((utcHour % 24) + 24) % 24);
+  const simM = Math.floor((utcHour - Math.floor(utcHour)) * 60);
   const bjH = (simH + 8) % 24;
 
   return {
@@ -340,124 +523,262 @@ function computeFireCloud(utcHour, now) {
 
 // ===== 地图初始化 =====
 const map = L.map('map', {
-  center: [30, 110],
-  zoom: 5,
-  zoomControl: true,
-  attributionControl: false,
-  maxBounds: [[-10, 50], [60, 180]],
-  minZoom: 3,
-  maxZoom: 12,
+  center: [35, 105], zoom: 4, minZoom: 3, maxZoom: 8,
+  zoomControl: true, attributionControl: false
 });
 
-// ESRI 卫星底图 (免费, 无需 API Key)
-L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-  maxZoom: 18,
-}).addTo(map);
+// 底图
+const baseLayers = {
+  sat: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    maxZoom: 18, attribution: 'Esri'
+  }),
+  std: L.tileLayer('https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}', {
+    subdomains: ['1','2','3','4'], maxZoom: 18
+  }),
+  dark: L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    subdomains: ['a','b','c','d'], maxZoom: 18
+  })
+};
+let currentBase = 'sat';
+baseLayers.sat.addTo(map);
 
-let fireCloudLayer = null;
-
-// 火烧云颜色
-function getFireCloudColor(props) {
-  const score = props.score || 0;
-  if (props.is_morning) {
-    // 朝霞: 金色到橙色
-    const r = Math.round(255);
-    const g = Math.round(180 - score * 80);
-    const b = Math.round(60 - score * 40);
-    const a = (0.2 + score * 0.5).toFixed(2);
-    return `rgba(${r},${g},${b},${a})`;
-  } else {
-    // 晚霞: 红色到玫红
-    const r = Math.round(200 + score * 55);
-    const g = Math.round(50 - score * 20);
-    const b = Math.round(60 - score * 30);
-    const a = (0.2 + score * 0.5).toFixed(2);
-    return `rgba(${r},${g},${b},${a})`;
-  }
+function switchBase(type, btn) {
+  map.removeLayer(baseLayers[currentBase]);
+  baseLayers[type].addTo(map);
+  currentBase = type;
+  document.querySelectorAll('.basemap-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
 }
 
-function styleFireCloud(feature) {
+// ===== 火烧云图层 =====
+let fireCloudLayer = null;
+let fireCloudData = null;
+let simulateHour = 20.8;
+
+function getFireCloudColor(props) {
+  const score = props.score || 0;
+  const h = props.cloud_base_km || 2;
+  const isEvening = props.is_evening;
+  const isMorning = props.is_morning;
+  let r, g, b, a;
+
+  if (isMorning) {
+    if (score < 0.3) { r = 255; g = 180; b = 80; }
+    else if (score < 0.6) { r = 255; g = 140; b = 60; }
+    else { r = 255; g = 100; b = 40; }
+    if (h > 8) { r = Math.min(255, r); g = Math.max(60, g - 60); b = Math.min(255, b + 80); }
+    if (h < 3) { r = 255; g = Math.min(220, g + 40); b = Math.max(40, b - 20); }
+  } else {
+    if (score < 0.3) { r = 180; g = 60; b = 120; }
+    else if (score < 0.6) { r = 220; g = 50; b = 80; }
+    else { r = 200; g = 30; b = 30; }
+    if (h > 8) { r = Math.min(255, r + 30); g = Math.max(20, g - 20); b = Math.min(255, b + 60); }
+    if (h < 3) { r = Math.min(255, r + 20); g = Math.min(100, g + 30); b = Math.max(30, b - 40); }
+  }
+  a = 0.15 + score * 0.5;
+  return `rgba(${r},${g},${b},${a.toFixed(2)})`;
+}
+
+function fireCloudStyle(feature) {
   return {
     fillColor: getFireCloudColor(feature.properties),
-    color: feature.properties.is_morning ? '#fbbf24' : '#f87171',
+    color: feature.properties.is_morning ? 'rgba(255,180,80,0.4)' : 'rgba(220,50,80,0.4)',
     weight: 0.5,
-    opacity: 0.6,
     fillOpacity: 1,
   };
 }
 
-function showFireCloud(geojson) {
-  if (fireCloudLayer) map.removeLayer(fireCloudLayer);
-
-  fireCloudLayer = L.geoJSON(geojson, {
-    style: styleFireCloud,
-  }).addTo(map);
-
-  // 更新信息面板
-  const meta = geojson.meta || {};
-  document.getElementById('infoUtc').textContent = meta.current_utc || '--';
-  document.getElementById('infoBj').textContent = meta.current_beijing || '--';
-  document.getElementById('infoMorning').textContent = (meta.morning_count || 0) + ' 个格点';
-  document.getElementById('infoEvening').textContent = (meta.evening_count || 0) + ' 个格点';
-  document.getElementById('infoDecl').textContent = (meta.declination || '--') + '°';
-
-  const panel = document.getElementById('infoPanel');
-  if (meta.has_fire_cloud) {
-    panel.classList.add('show');
-    document.getElementById('infoTitle').textContent = '🌅 朝霞 / 晚霞 分析';
-    document.getElementById('statusText').textContent = '有火烧云';
-    document.getElementById('statusTag').className = 'status-tag live';
-  } else {
-    panel.classList.add('show');
-    document.getElementById('infoTitle').textContent = '当前无火烧云';
-    document.getElementById('statusText').textContent = '无火烧云';
-    document.getElementById('statusTag').className = 'status-tag no';
-  }
+function fireCloudPopup(feature, layer) {
+  const p = feature.properties;
+  const type = p.is_morning ? '🌅 朝霞' : '🌇 晚霞';
+  const azLabel = p.is_morning ? '日出方位' : '日落方位';
+  const az = p.sun_azimuth || 0;
+  const azDir = az >= 337.5 || az < 22.5 ? '北' : az >= 22.5 && az < 67.5 ? '东北' : az >= 67.5 && az < 112.5 ? '东' : az >= 112.5 && az < 157.5 ? '东南' : az >= 157.5 && az < 202.5 ? '南' : az >= 202.5 && az < 247.5 ? '西南' : az >= 247.5 && az < 292.5 ? '西' : '西北';
+  return `
+    <div style="font-size:12px;line-height:1.8;min-width:200px">
+      <div style="font-weight:700;font-size:14px;color:${p.is_morning ? '#d97706' : '#dc2626'};margin-bottom:4px">${type}</div>
+      <div>云底高度: <b>${p.cloud_base_km} km</b></div>
+      <div>等效云底: <b>${p.eff_cloud_base_km} km</b></div>
+      <div>霞光深入距离: <b>${p.penetration_km} km</b></div>
+      <div>预计持续: <b>${p.fire_duration_min} 分钟</b></div>
+      <div>${azLabel}: <b>${az}° (${azDir})</b></div>
+      <div>概率评分: <b>${(p.score * 100).toFixed(0)}%</b></div>
+      <div style="margin-top:4px;font-size:10px;color:#94a3b8;border-top:1px solid rgba(255,255,255,0.1);padding-top:4px">
+        D=√(2Rh) | T≈2D/v_sunset
+      </div>
+    </div>`;
 }
 
-function updateTimeDisplay() {
-  const now = new Date();
-  const utc = now.toISOString().replace('T',' ').slice(0,19) + ' UTC';
-  const bj = new Date(now.getTime() + 8*3600000).toISOString().replace('T',' ').slice(0,16);
-  document.getElementById('timeDisplay').textContent = '北京 ' + bj;
+function onEachFireCloudFeature(feature, layer) {
+  layer.bindPopup(fireCloudPopup(feature, layer), {maxWidth: 250});
+  layer.on('mouseover', function(e) {
+    e.target.setStyle({weight: 2, color: 'rgba(255,200,0,0.8)'});
+  });
+  layer.on('mouseout', function(e) {
+    fireCloudLayer.resetStyle(e.target);
+  });
 }
 
-// ===== 计算与交互 =====
-let currentSimHour = 20.8; // 默认模拟朝霞时段
-
-function simCalc(hour) {
-  currentSimHour = hour;
-
-  // 更新按钮状态
-  document.querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
-  if (hour === 20.8) document.querySelector('.btn-morning').classList.add('active');
-  else if (hour === 21.0) document.querySelectorAll('.btn-morning')[1].classList.add('active');
-  else if (hour === 11.0) document.querySelector('.btn-evening').classList.add('active');
-  else if (hour === 11.5) document.querySelectorAll('.btn-evening')[1].classList.add('active');
-  else document.querySelectorAll('.btn')[4].classList.add('active');
+function calculateFireCloud() {
+  const btn = document.getElementById('fcCalcBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner" style="width:12px;height:12px;border-color:rgba(251,146,60,0.3);border-top-color:#fb923c"></span><span>计算中...</span>';
+  document.getElementById('statusBadge').className = 'status-badge loading';
+  document.getElementById('statusText').textContent = '计算中';
 
   const overlay = document.getElementById('loadingOverlay');
   overlay.classList.add('show');
 
-  // 使用 setTimeout 让 loading 动画先显示
   setTimeout(() => {
     const now = new Date();
     let utcHour;
-    if (hour < 0) {
+    if (simulateHour < 0 || simulateHour === null) {
       utcHour = now.getUTCHours() + now.getUTCMinutes() / 60 + now.getUTCSeconds() / 3600;
     } else {
-      utcHour = hour;
+      utcHour = simulateHour;
     }
 
     const geojson = computeFireCloud(utcHour, now);
-    showFireCloud(geojson);
+    fireCloudData = geojson;
+    const meta = geojson.meta || {};
+
+    updateFireCloudInfo(meta);
+
+    if (meta.has_fire_cloud && geojson.features.length > 0) {
+      if (fireCloudLayer) { map.removeLayer(fireCloudLayer); }
+
+      fireCloudLayer = L.geoJSON(geojson, {
+        style: fireCloudStyle,
+        onEachFeature: onEachFireCloudFeature,
+      });
+
+      const opacity = document.getElementById('fcOpacity').value / 100;
+      fireCloudLayer.setStyle({ fillOpacity: opacity });
+
+      if (document.getElementById('fireCloudToggle').checked) {
+        fireCloudLayer.addTo(map);
+      }
+
+      document.getElementById('fireCloudLegend').style.display = 'block';
+      document.getElementById('statusBadge').className = 'status-badge live';
+      document.getElementById('statusText').textContent = '有火烧云';
+      showToast(`分析完成: ${meta.feature_count} 个区域 (${meta.morning_count || 0}朝霞, ${meta.evening_count || 0}晚霞)`);
+    } else {
+      if (fireCloudLayer) { map.removeLayer(fireCloudLayer); fireCloudLayer = null; }
+      document.getElementById('fireCloudLegend').style.display = 'none';
+      document.getElementById('statusBadge').className = 'status-badge no';
+      document.getElementById('statusText').textContent = '无火烧云';
+      showToast('当前时间无朝霞/晚霞');
+    }
+
     overlay.classList.remove('show');
-  }, 100);
+    btn.disabled = false;
+    btn.innerHTML = '<span>🌅</span><span>计算朝霞晚霞范围</span>';
+  }, 150);
 }
 
-// 初始加载
+function toggleFireCloud() {
+  const checked = document.getElementById('fireCloudToggle').checked;
+  if (checked && fireCloudLayer) {
+    fireCloudLayer.addTo(map);
+  } else if (fireCloudLayer) {
+    map.removeLayer(fireCloudLayer);
+  }
+}
+
+function updateFireCloudOpacity(val) {
+  document.getElementById('fcOpacityVal').textContent = val;
+  if (fireCloudLayer) {
+    fireCloudLayer.eachLayer(function(layer) {
+      const props = layer.feature.properties;
+      const baseColor = getFireCloudColor(props);
+      const rgbMatch = baseColor.match(/rgba?\((\d+),(\d+),(\d+),([\d.]+)\)/);
+      if (rgbMatch) {
+        const newAlpha = (val / 100).toFixed(2);
+        layer.setStyle({ fillColor: `rgba(${rgbMatch[1]},${rgbMatch[2]},${rgbMatch[3]},${newAlpha})` });
+      }
+    });
+  }
+}
+
+function updateFireCloudInfo(meta) {
+  const panel = document.getElementById('fireCloudInfo');
+  if (!meta.has_fire_cloud) {
+    panel.innerHTML = `
+      <div style="color:#94a3b8;margin-bottom:4px">当前时间无朝霞/晚霞</div>
+      <div>UTC: ${meta.current_utc || '--'}</div>
+      <div>北京: ${meta.current_beijing || '--'}</div>
+      <div style="margin-top:4px;font-size:10px;color:#64748b">云底数据: 气候估算</div>
+    `;
+    panel.className = 'fire-cloud-info visible';
+    return;
+  }
+
+  panel.innerHTML = `
+    <div style="color:#fb923c;font-weight:700;margin-bottom:4px">🌅 朝霞 / 晚霞 分析结果</div>
+    <div class="info-item"><span>UTC时间</span><span>${meta.current_utc}</span></div>
+    <div class="info-item"><span>北京时间</span><span>${meta.current_beijing}</span></div>
+    <div class="info-item"><span>云底数据源</span><span style="color:#fbbf24">气候估算</span></div>
+    <div class="info-item"><span>总覆盖格点</span><span>${meta.feature_count} 个</span></div>
+    <div class="info-item"><span>🌅 朝霞区域</span><span style="color:#fbbf24">${meta.morning_count || 0} 个</span></div>
+    <div class="info-item"><span>🌇 晚霞区域</span><span style="color:#f87171">${meta.evening_count || 0} 个</span></div>
+    <div class="info-item"><span>太阳赤纬</span><span>${meta.declination}°</span></div>
+    <div style="margin-top:4px;font-size:10px;color:#94a3b8;line-height:1.5">
+      <div>核心公式:</div>
+      <div>• D ≈ √(2·R·h), R=6371km</div>
+      <div>• h_eff = h - 0.5km (气溶胶修正)</div>
+      <div>• T ≈ 2D/v_sunset</div>
+      <div>• v_sunset ≈ 18~21 km/min</div>
+    </div>
+  `;
+  panel.className = 'fire-cloud-info visible';
+}
+
+function simCalc(hour) {
+  simulateHour = hour < 0 ? null : hour;
+
+  document.querySelectorAll('.sim-btn').forEach(b => b.classList.remove('active'));
+  if (hour === 20.8) document.querySelector('.sim-btn.morning').classList.add('active');
+  else if (hour === 21.0) document.querySelectorAll('.sim-btn.morning')[1].classList.add('active');
+  else if (hour === 11.0) document.querySelector('.sim-btn.evening').classList.add('active');
+  else if (hour === 11.5) document.querySelectorAll('.sim-btn.evening')[1].classList.add('active');
+  else document.querySelector('.sim-btn.now').classList.add('active');
+
+  const toggle = document.getElementById('fireCloudToggle');
+  if (!toggle.checked) toggle.checked = true;
+
+  calculateFireCloud();
+}
+
+// ===== 坐标显示 =====
+map.on('mousemove', function(e) {
+  const lat = e.latlng.lat.toFixed(2);
+  const lon = e.latlng.lng.toFixed(2);
+  const ns = lat >= 0 ? 'N' : 'S';
+  const ew = lon >= 0 ? 'E' : 'W';
+  document.getElementById('coordDisplay').textContent =
+    `${Math.abs(lat)}${ns}, ${Math.abs(lon)}${ew} | Zoom: ${map.getZoom()}`;
+});
+
+// ===== Toast =====
+function showToast(msg) {
+  const toast = document.getElementById('toast');
+  toast.textContent = msg;
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 3000);
+}
+
+// ===== 时间更新 =====
+function updateTimeDisplay() {
+  const now = new Date();
+  const bj = new Date(now.getTime() + 8 * 3600000);
+  document.getElementById('bjTime').textContent = bj.toISOString().replace('T',' ').slice(0,19);
+  document.getElementById('utcTime').textContent = now.toISOString().replace('T',' ').slice(0,19);
+}
+
+// ===== 初始化 =====
 setTimeout(() => {
-  simCalc(currentSimHour);
+  simCalc(20.8);
   updateTimeDisplay();
   setInterval(updateTimeDisplay, 30000);
 }, 500);
