@@ -230,7 +230,7 @@
 
   <div class="info-row">
     <span class="info-label">卫星</span>
-    <span class="info-value">GK2A 全圆盘 (128.2E)</span>
+    <span class="info-value">GK2A 全圆盘 (128.0E)</span>
   </div>
   <div class="info-row">
     <span class="info-label">实时数据</span>
@@ -726,17 +726,23 @@ const GK2A_PRODUCTS = {
 // 输出图像的地理边界 (中国及东亚)
 const GK2A_BOUNDS = [[5, 65], [55, 160]];
 
-// 静止卫星投影参数 (GK2A 位于 128.2°E, 赤道上空 35786km)
-// 参数来源: GK2A netCDF 文件全局属性
-const GK2A_SAT_LON = 128.2;
-const GK2A_SAT_H = 35785863; // 卫星高度 (地表以上, m) = nominal_satellite_height(42164000) - earth_equatorial_radius(6378137)
-const GK2A_RE = 6378137.0; // 地球赤道半径 (WGS84)
-const GK2A_RP = 6356752.3; // 地球极半径 (WGS84)
+// 静止卫星投影参数 — 来源: CIRA SLIDER define-products.js (gk2a full_disk lat_lon_query)
+// CIRA SLIDER 是 GK2A 数据的发布方, 其投影参数为权威值
+const GK2A_SAT_LON = 128.0;       // 卫星经度 (CIRA: lon0=128, 非 netCDF 的 128.2)
+const GK2A_SAT_ALT = 42171.7;     // 卫星高度 (km, 从地心算; CIRA: sat_alt=42171.7)
+const GK2A_RE = 6378137.0;        // 地球赤道半径 (m, WGS84)
+const GK2A_RP = 6356752.3;        // 地球极半径 (m, WGS84)
 
-// 全圆盘图像边界扫描角 (弧度)
-// 来自 GK2A netCDF 文件: image_upperleft_x = -0.15397200, image_lowerright_x = 0.15397200
-// 注意: 这不是理论地球边缘角 arcsin(R/(R+H))≈0.1518, 而是实际图像边界
-// 图像比地球圆盘大约1.4% (边缘有少量太空区域)
+// 地球圆盘边缘扫描角 (弧度) — CIRA: max_rad_x / max_rad_y
+const GK2A_MAX_RAD_X = 0.150618;  // X方向地球边缘扫描角
+const GK2A_MAX_RAD_Y = 0.150485;  // Y方向地球边缘扫描角
+
+// 地球圆盘在 zoom 0 图像中的像素半径 — CIRA: disk_radius_x_z0 / disk_radius_y_z0
+const GK2A_DISK_RADIUS_X = 337;   // X方向圆盘半径 (像素, zoom 0)
+const GK2A_DISK_RADIUS_Y = 336;   // Y方向圆盘半径 (像素, zoom 0)
+const GK2A_TILE_SIZE = 688;       // 瓦片尺寸 (像素, CIRA: tile_size=688)
+
+// 兼容旧代码: 最大扫描角 (用于可见性判断等)
 const GK2A_MAX_SCAN = 0.153972;
 
 // 计算扫描角 (GEOS 投影, sweep=y, 椭球修正)
@@ -762,10 +768,10 @@ function scanAngleFromLatLng(lat, lng) {
   const Vy = r * Math.sin(dLonR) * Math.cos(geoLat);
   const Vz = r * Math.sin(geoLat);
 
-  // 卫星位置: (0, 0, 1 + h/a)
+  // 卫星位置: (0, 0, sat_alt/a) — sat_alt 从地心算 (CIRA: 42171.7 km)
   // tmp = 卫星到地表点在 nadir 方向的分量 (正值=可见)
-  const hNorm = GK2A_SAT_H / GK2A_RE;
-  const tmp = (1 + hNorm) - Vx;
+  const satAltNorm = (GK2A_SAT_ALT * 1000) / GK2A_RE; // km→m, 归一化到 a=1
+  const tmp = satAltNorm - Vx;
 
   // sweep=y (GK2A/Himawari/Meteosat):
   //   sx = atan(Vy / tmp)                    — 东西扫描角
@@ -784,10 +790,11 @@ function isVisibleFromSat(lat, lng) {
   const latR = lat * Math.PI / 180;
   const dLonR = (lng - GK2A_SAT_LON) * Math.PI / 180;
   const R = GK2A_RE;
-  // 地心角: 卫星-地心-地表点
-  const centralAngle = Math.acos(Math.cos(latR) * Math.cos(dLonR));
   // 地球可见极限地心角: arccos(R/(R+H)) ≈ 81.3°
-  const maxCentralAngle = Math.acos(R / (R + GK2A_SAT_H));
+  // H = sat_alt - R (从地心高度减去地球半径 = 从地表高度)
+  const H = GK2A_SAT_ALT * 1000 - R;
+  const maxCentralAngle = Math.acos(R / (R + H));
+  const centralAngle = Math.acos(Math.cos(latR) * Math.cos(dLonR));
   return centralAngle < maxCentralAngle;
 }
 
@@ -920,9 +927,14 @@ function downloadGk2aTileViaProxy(url) {
 // 只下载中国区域所需的瓦片, 提高加载速度
 function getNeededTiles(zoomLevel) {
   const grid = 2 ** zoomLevel;
-  const tileSize = 688;
+  const tileSize = GK2A_TILE_SIZE;
   const totalSize = grid * tileSize;
-  const maxScan = GK2A_MAX_SCAN;
+
+  // CIRA SLIDER 像素映射: 扫描角 → 像素坐标
+  // px = (scanX / max_rad_x) * disk_radius_x * grid + totalSize/2
+  // py = totalSize/2 - (scanY / max_rad_y) * disk_radius_y * grid
+  const diskRx = GK2A_DISK_RADIUS_X * grid;
+  const diskRy = GK2A_DISK_RADIUS_Y * grid;
 
   // 计算中国区域四角的扫描角, 转换为像素坐标
   const corners = [
@@ -936,8 +948,8 @@ function getNeededTiles(zoomLevel) {
   for (const [lat, lng] of corners) {
     if (!isVisibleFromSat(lat, lng)) continue;
     const [scanX, scanY] = scanAngleFromLatLng(lat, lng);
-    const px = (scanX / maxScan + 1) * 0.5 * totalSize;
-    const py = (1 - scanY / maxScan) * 0.5 * totalSize;
+    const px = (scanX / GK2A_MAX_RAD_X) * diskRx + totalSize / 2;
+    const py = totalSize / 2 - (scanY / GK2A_MAX_RAD_Y) * diskRy;
     const col = Math.floor(px / tileSize);
     const row = Math.floor(py / tileSize);
     minCol = Math.min(minCol, col);
@@ -1034,10 +1046,13 @@ function reprojectGk2a(sourceCanvas) {
   const latStep = (north - south) / outH;
   const lonStep = (east - west) / outW;
 
-  // 全圆盘扫描角 → 像素映射:
-  // scanX ∈ [-maxScan, +maxScan] → srcX ∈ [0, sw]  (东=右=大x)
-  // scanY ∈ [+maxScan, -maxScan] → srcY ∈ [0, sh]  (北=上=小y, Y轴翻转)
-  const maxScan = GK2A_MAX_SCAN;
+  // CIRA SLIDER 像素映射: 扫描角 → 源图像像素坐标
+  // srcX = (scanX / max_rad_x) * disk_radius_x * grid + sw/2
+  // srcY = sh/2 - (scanY / max_rad_y) * disk_radius_y * grid
+  // 其中 grid = sw / tile_size (瓦片网格数)
+  const grid = sw / GK2A_TILE_SIZE;
+  const diskRx = GK2A_DISK_RADIUS_X * grid;
+  const diskRy = GK2A_DISK_RADIUS_Y * grid;
 
   for (let oy = 0; oy < outH; oy++) {
     const lat = south + (oy + 0.5) * latStep;
@@ -1050,9 +1065,9 @@ function reprojectGk2a(sourceCanvas) {
       // 计算扫描角
       const [scanX, scanY] = scanAngleFromLatLng(lat, lng);
 
-      // 扫描角 → 源图像像素坐标
-      const srcX = (scanX / maxScan + 1) * 0.5 * sw;
-      const srcY = (1 - scanY / maxScan) * 0.5 * sh;
+      // 扫描角 → 源图像像素坐标 (CIRA SLIDER 映射)
+      const srcX = (scanX / GK2A_MAX_RAD_X) * diskRx + sw / 2;
+      const srcY = sh / 2 - (scanY / GK2A_MAX_RAD_Y) * diskRy;
 
       // 双线性插值采样
       const oi = (oy * outW + ox) * 4;
@@ -1077,7 +1092,7 @@ function reprojectGk2a(sourceCanvas) {
   }
 
   outCtx.putImageData(outData, 0, 0);
-  console.log(`[GK2A] 重投影完成: ${sw}x${sh} → ${outW}x${outH} (全圆盘→中国区域, maxScan=${maxScan.toFixed(5)})`);
+  console.log(`[GK2A] 重投影完成: ${sw}x${sh} → ${outW}x${outH} (CIRA参数: lon0=${GK2A_SAT_LON}, maxRad=(${GK2A_MAX_RAD_X},${GK2A_MAX_RAD_Y}), diskR=(${GK2A_DISK_RADIUS_X},${GK2A_DISK_RADIUS_Y}))`);
   return outCanvas.toDataURL('image/png');
 }
 
