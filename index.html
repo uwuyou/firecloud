@@ -726,16 +726,17 @@ const GK2A_PRODUCTS = {
 // 输出图像的地理边界 (中国及东亚)
 const GK2A_BOUNDS = [[5, 65], [55, 160]];
 
-// 静止卫星投影参数 — 来源: CIRA SLIDER define-products.js (gk2a full_disk lat_lon_query)
+// 静止卫星投影参数 — 来源: CIRA SLIDER define-products.js + rammb-slider.min.js
 // CIRA SLIDER 是 GK2A 数据的发布方, 其投影参数为权威值
-const GK2A_SAT_LON = 128.0;       // 卫星经度 (CIRA: lon0=128, 非 netCDF 的 128.2)
+// 所有参数与 CIRA rammb-slider.min.js 中的 bigPixels2LatLon 函数完全一致
+const GK2A_SAT_LON = 128.0;       // 卫星经度 (CIRA: lon0=128.0)
 const GK2A_SAT_ALT = 42171.7;     // 卫星高度 (km, 从地心算; CIRA: sat_alt=42171.7)
-const GK2A_RE = 6378137.0;        // 地球赤道半径 (m, WGS84)
-const GK2A_RP = 6356752.3;        // 地球极半径 (m, WGS84)
+const GK2A_RE = 6378.1;           // 地球赤道半径 (km, CIRA 硬编码值, 非 WGS84)
+const GK2A_RP = 6356.8;           // 地球极半径 (km, CIRA 硬编码值, 非 WGS84)
 
 // 地球圆盘边缘扫描角 (弧度) — CIRA: max_rad_x / max_rad_y
-const GK2A_MAX_RAD_X = 0.150618;  // X方向地球边缘扫描角
-const GK2A_MAX_RAD_Y = 0.150485;  // Y方向地球边缘扫描角
+const GK2A_MAX_RAD_X = 0.150618;  // X方向地球边缘扫描角 (E-W)
+const GK2A_MAX_RAD_Y = 0.150485;  // Y方向地球边缘扫描角 (N-S)
 
 // 地球圆盘在 zoom 0 图像中的像素半径 — CIRA: disk_radius_x_z0 / disk_radius_y_z0
 const GK2A_DISK_RADIUS_X = 337;   // X方向圆盘半径 (像素, zoom 0)
@@ -743,57 +744,62 @@ const GK2A_DISK_RADIUS_Y = 336;   // Y方向圆盘半径 (像素, zoom 0)
 const GK2A_TILE_SIZE = 688;       // 瓦片尺寸 (像素, CIRA: tile_size=688)
 
 // 兼容旧代码: 最大扫描角 (用于可见性判断等)
-const GK2A_MAX_SCAN = 0.153972;
+const GK2A_MAX_SCAN = 0.1518;
 
-// 计算扫描角 (GEOS 投影, sweep=y, 椭球修正)
-// 参考: PROJ geos 投影源码, GK2A netCDF 导航参数
-// sweep=y 表示先扫描南北方向(Y), 再扫描东西方向(X)
-// 卫星在 (0, 0, 1+h/a) 归一化坐标, 地表点在 (Vx, Vy, Vz)
+// 计算扫描角 (GEOS 投影, sweep=x, 椭球修正)
+// 来源: 从 CIRA SLIDER rammb-slider.min.js 的 bigPixels2LatLon 逆函数严格推导
+//
+// CIRA 的逆函数 (pixel → lat/lon):
+//   ray direction = (cos(λ)cos(φ), sin(λ), cos(λ)sin(φ))
+//   卫星在 (H, 0, 0), H = sat_alt (从地心算)
+//   地表点 ECEF: X = H - dist*cos(λ)*cos(φ), Y = dist*sin(λ), Z = dist*cos(λ)*sin(φ)
+//   lat = atan((Re/Rp)² * Z / sqrt(X² + Y²))
+//   lon = lon0 + atan(Y / X)
+//
+// 正函数 (lat/lon → scan angle) 推导:
+//   从 ECEF (X, Y, Z) 和卫星位置 (H, 0, 0):
+//   sin(λ) = Y / dist
+//   cos(λ)*cos(φ) = (H - X) / dist
+//   cos(λ)*sin(φ) = Z / dist
+//   → cos(λ) = sqrt((H-X)² + Z²) / dist
+//   → λ = atan2(Y, sqrt((H-X)² + Z²))     [E-W 扫描角]
+//   → φ = atan2(Z, H - X)                   [N-S 扫描角]
+//
+// 这是 sweep=x 约定 (CIRA 对所有卫星使用此约定, 包括 GK2A)
 function scanAngleFromLatLng(lat, lng) {
   const latR = lat * Math.PI / 180;
   const dLonR = (lng - GK2A_SAT_LON) * Math.PI / 180;
 
-  // 椭球修正: 地理纬度 → 地心纬度
-  // PROJ geos 椭球公式: phi_geo = atan((b/a)² * tan(phi))
-  const rp = GK2A_RP / GK2A_RE; // b/a
-  const rp2 = rp * rp; // (b/a)² = 1 - e²
-  const geoLat = Math.atan(rp2 * Math.tan(latR));
+  // ECEF 坐标 (km) — 标准公式, 使用 CIRA 的椭球参数 (Re=6378.1, rp=6356.8)
+  const e2 = 1 - (GK2A_RP / GK2A_RE) ** 2;  // 第一偏心率平方
+  const sinLat = Math.sin(latR);
+  const N = GK2A_RE / Math.sqrt(1 - e2 * sinLat * sinLat); // 卯酉圈曲率半径
+  const X = N * Math.cos(latR) * Math.cos(dLonR);  // 指向卫星子点方向
+  const Y = N * Math.cos(latR) * Math.sin(dLonR);  // 东-西方向
+  const Z = N * (1 - e2) * sinLat;                  // 北-南方向
 
-  // 地心半径 (归一化到 a=1)
-  // PROJ: r = (b/a) / hypot((b/a)*cos(phi_geo), sin(phi_geo))
-  const r = rp / Math.hypot(rp * Math.cos(geoLat), Math.sin(geoLat));
+  // 卫星位置: (H, 0, 0), H = sat_alt (从地心算, km)
+  const H = GK2A_SAT_ALT;
+  const tmp = H - X;  // 卫星→地表点在 X 方向的分量 (正值=可见)
 
-  // 地表点位置向量 (归一化, 以 a 为单位)
-  const Vx = r * Math.cos(dLonR) * Math.cos(geoLat);
-  const Vy = r * Math.sin(dLonR) * Math.cos(geoLat);
-  const Vz = r * Math.sin(geoLat);
+  // sweep=x 正向公式 (从 CIRA 逆函数严格推导):
+  //   λ (E-W 扫描角, 水平像素) = atan2(Y, hypot(H-X, Z))
+  //   φ (N-S 扫描角, 垂直像素) = atan2(Z, H-X)
+  const lambda = Math.atan2(Y, Math.hypot(tmp, Z)); // E-W scan angle
+  const phi = Math.atan2(Z, tmp);                    // N-S scan angle
 
-  // 卫星位置: (0, 0, sat_alt/a) — sat_alt 从地心算 (CIRA: 42171.7 km)
-  // tmp = 卫星到地表点在 nadir 方向的分量 (正值=可见)
-  const satAltNorm = (GK2A_SAT_ALT * 1000) / GK2A_RE; // km→m, 归一化到 a=1
-  const tmp = satAltNorm - Vx;
-
-  // sweep=y (GK2A/Himawari/Meteosat):
-  //   sx = atan(Vy / tmp)                    — 东西扫描角
-  //   sy = atan(Vz / hypot(Vy, tmp))         — 南北扫描角 (注意分母是 hypot, 不是 tmp)
-  // sweep=x (GOES) 则相反:
-  //   sx = atan(Vy / hypot(Vz, tmp))
-  //   sy = atan(Vz / tmp)
-  const sx = Math.atan2(Vy, tmp);
-  const sy = Math.atan2(Vz, Math.hypot(Vy, tmp));
-
-  return [sx, sy];
+  return [lambda, phi];
 }
 
 // 判断点是否可见 (地球张角 ~8.7°)
 function isVisibleFromSat(lat, lng) {
   const latR = lat * Math.PI / 180;
   const dLonR = (lng - GK2A_SAT_LON) * Math.PI / 180;
-  const R = GK2A_RE;
-  // 地球可见极限地心角: arccos(R/(R+H)) ≈ 81.3°
-  // H = sat_alt - R (从地心高度减去地球半径 = 从地表高度)
-  const H = GK2A_SAT_ALT * 1000 - R;
-  const maxCentralAngle = Math.acos(R / (R + H));
+  const Re = GK2A_RE; // km
+  // 地球可见极限地心角: arccos(Re/(Re+H_surf)) ≈ 81.3°
+  // H_surf = sat_alt - Re (从地表算的高度)
+  const H_surf = GK2A_SAT_ALT - Re;
+  const maxCentralAngle = Math.acos(Re / (Re + H_surf));
   const centralAngle = Math.acos(Math.cos(latR) * Math.cos(dLonR));
   return centralAngle < maxCentralAngle;
 }
@@ -805,6 +811,46 @@ function getFullDiskScanRange() {
     sxMin: -GK2A_MAX_SCAN, sxMax: GK2A_MAX_SCAN,
     syMin: -GK2A_MAX_SCAN, syMax: GK2A_MAX_SCAN,
   };
+}
+
+// ===== proj4js 交叉验证 (调试用, 可在控制台调用 validateProjection()) =====
+function validateProjection() {
+  // 定义 GK2A geos 投影 (CIRA 参数, sweep=x)
+  const projStr = '+proj=geos +lon_0=128 +h=35793600 +sweep=x +a=6378100 +b=6356800 +units=m';
+  try { proj4.defs('gk2a_geos', projStr); } catch(e) {}
+
+  const testPoints = [
+    { name: 'sub-sat point', lat: 0, lon: 128 },
+    { name: 'Beijing',       lat: 39.9, lon: 116.4 },
+    { name: 'Shanghai',      lat: 31.2, lon: 121.5 },
+    { name: 'Seoul',         lat: 37.5, lon: 127.0 },
+    { name: 'Tokyo',         lat: 35.7, lon: 139.7 },
+    { name: 'Urumqi',        lat: 43.8, lon: 87.6 },
+    { name: 'Sanya',         lat: 18.3, lon: 109.5 },
+    { name: 'edge N',        lat: 50, lon: 128 },
+    { name: 'edge W',        lat: 30, lon: 75 },
+    { name: 'edge E',        lat: 30, lon: 155 },
+  ];
+
+  const H = GK2A_SAT_ALT; // km, from Earth center
+  const results = [];
+  for (const p of testPoints) {
+    const [lambda, phi] = scanAngleFromLatLng(p.lat, p.lon);
+    let projResult = 'N/A';
+    try {
+      const proj = proj4('EPSG:4326', 'gk2a_geos', [p.lon, p.lat]);
+      // PROJ geos 输出: x = H_m * sin(lambda) / cos(lambda) (近似), 实际需验证
+      const H_m = (H - GK2A_RE) * 1000; // 卫星到地表高度 (m)
+      const lambda_proj = Math.atan(proj[0] / (H * 1000)); // 尝试从 proj 输出反推扫描角
+      const phi_proj = Math.atan(proj[1] / (H * 1000));
+      projResult = `proj4js: (${proj[0].toFixed(1)}, ${proj[1].toFixed(1)}) → λ=${lambda_proj.toFixed(8)}, φ=${phi_proj.toFixed(8)}`;
+    } catch(e) { projResult = 'proj4js error: ' + e.message; }
+
+    results.push(`${p.name} (${p.lat}°, ${p.lon}°): myCode λ=${lambda.toFixed(8)}, φ=${phi.toFixed(8)} | ${projResult}`);
+  }
+  const out = results.join('\n');
+  console.log(out);
+  return out;
 }
 
 let gk2aScanRange = null; // 全圆盘扫描角范围 (延迟初始化)
@@ -930,11 +976,11 @@ function getNeededTiles(zoomLevel) {
   const tileSize = GK2A_TILE_SIZE;
   const totalSize = grid * tileSize;
 
-  // CIRA SLIDER 像素映射: 扫描角 → 像素坐标
-  // px = (scanX / max_rad_x) * disk_radius_x * grid + totalSize/2
-  // py = totalSize/2 - (scanY / max_rad_y) * disk_radius_y * grid
+  // CIRA SLIDER 像素映射 (含 +0.5 偏移)
   const diskRx = GK2A_DISK_RADIUS_X * grid;
   const diskRy = GK2A_DISK_RADIUS_Y * grid;
+  const halfW = totalSize / 2 + 0.5;
+  const halfH = totalSize / 2 + 0.5;
 
   // 计算中国区域四角的扫描角, 转换为像素坐标
   const corners = [
@@ -947,9 +993,9 @@ function getNeededTiles(zoomLevel) {
   let minCol = grid, maxCol = -1, minRow = grid, maxRow = -1;
   for (const [lat, lng] of corners) {
     if (!isVisibleFromSat(lat, lng)) continue;
-    const [scanX, scanY] = scanAngleFromLatLng(lat, lng);
-    const px = (scanX / GK2A_MAX_RAD_X) * diskRx + totalSize / 2;
-    const py = totalSize / 2 - (scanY / GK2A_MAX_RAD_Y) * diskRy;
+    const [lambda, phi] = scanAngleFromLatLng(lat, lng);
+    const px = (lambda / GK2A_MAX_RAD_X) * diskRx + halfW;
+    const py = halfH - (phi / GK2A_MAX_RAD_Y) * diskRy;
     const col = Math.floor(px / tileSize);
     const row = Math.floor(py / tileSize);
     minCol = Math.min(minCol, col);
@@ -1026,13 +1072,29 @@ async function stitchGk2aToCanvas(product, timestamp, zoomLevel) {
   return canvas;
 }
 
-// ===== 核心: 静止卫星投影 → 等经纬度投影 (EPSG:4326), 裁剪至中国区域 =====
+// ===== 核心: 静止卫星投影 → Web Mercator (EPSG:3857), 裁剪至中国区域 =====
+// 关键修正: 输出必须是 Web Mercator 投影, 而非等经纬度 (EPSG:4326)
+// 因为 Leaflet 的 L.imageOverlay 在 Mercator 像素空间中线性拉伸图像,
+// 如果输出是等经纬度投影, 纬度方向的线性插值与 Mercator 的非线性纬度不匹配,
+// 会导致纬度相关的南北偏移 (中纬度偏移最大可达 ~7%)
 function reprojectGk2a(sourceCanvas) {
-  // 输出尺寸: 2000px 宽, 保持中国区域纵横比
-  const outW = 2000;
-  const outH = Math.round(outW * (GK2A_BOUNDS[1][0] - GK2A_BOUNDS[0][0]) / (GK2A_BOUNDS[1][1] - GK2A_BOUNDS[0][1]));
   const south = GK2A_BOUNDS[0][0], west = GK2A_BOUNDS[0][1];
   const north = GK2A_BOUNDS[1][0], east = GK2A_BOUNDS[1][1];
+
+  // Web Mercator 坐标范围 (球面 Mercator, 与 EPSG:3857 一致)
+  function latToMercY(lat) { return Math.log(Math.tan(Math.PI / 4 + lat * Math.PI / 360)); }
+  function lngToMercX(lng) { return lng * Math.PI / 180; }
+  function mercYToLat(y) { return (2 * Math.atan(Math.exp(y)) - Math.PI / 2) * 180 / Math.PI; }
+  function mercXToLng(x) { return x * 180 / Math.PI; }
+
+  const mercXwest = lngToMercX(west);
+  const mercXeast = lngToMercX(east);
+  const mercYsouth = latToMercY(south);
+  const mercYnorth = latToMercY(north);
+
+  // 输出尺寸: 2000px 宽, 高度按 Mercator 纵横比
+  const outW = 2000;
+  const outH = Math.round(outW * (mercYnorth - mercYsouth) / (mercXeast - mercXwest));
 
   const sw = sourceCanvas.width, sh = sourceCanvas.height;
   const srcCtx = sourceCanvas.getContext('2d');
@@ -1043,31 +1105,34 @@ function reprojectGk2a(sourceCanvas) {
   const outCtx = outCanvas.getContext('2d');
   const outData = outCtx.createImageData(outW, outH);
 
-  const latStep = (north - south) / outH;
-  const lonStep = (east - west) / outW;
+  // Mercator 像素步长
+  const mercXstep = (mercXeast - mercXwest) / outW;
+  const mercYstep = (mercYnorth - mercYsouth) / outH;
 
-  // CIRA SLIDER 像素映射: 扫描角 → 源图像像素坐标
-  // srcX = (scanX / max_rad_x) * disk_radius_x * grid + sw/2
-  // srcY = sh/2 - (scanY / max_rad_y) * disk_radius_y * grid
-  // 其中 grid = sw / tile_size (瓦片网格数)
+  // CIRA SLIDER 像素映射参数
   const grid = sw / GK2A_TILE_SIZE;
   const diskRx = GK2A_DISK_RADIUS_X * grid;
   const diskRy = GK2A_DISK_RADIUS_Y * grid;
+  const halfW = sw / 2 + 0.5;
+  const halfH = sh / 2 + 0.5;
 
   for (let oy = 0; oy < outH; oy++) {
-    const lat = south + (oy + 0.5) * latStep;
+    // Mercator Y → 纬度 (注意: oy=0 对应 north, oy=outH-1 对应 south)
+    const mercY = mercYnorth - (oy + 0.5) * mercYstep;
+    const lat = mercYToLat(mercY);
     for (let ox = 0; ox < outW; ox++) {
-      const lng = west + (ox + 0.5) * lonStep;
+      const mercX = mercXwest + (ox + 0.5) * mercXstep;
+      const lng = mercXToLng(mercX);
 
       // 检查该点是否在卫星可见范围内
       if (!isVisibleFromSat(lat, lng)) continue;
 
-      // 计算扫描角
-      const [scanX, scanY] = scanAngleFromLatLng(lat, lng);
+      // 计算扫描角 (sweep=x, 返回 [lambda=E-W, phi=N-S])
+      const [lambda, phi] = scanAngleFromLatLng(lat, lng);
 
-      // 扫描角 → 源图像像素坐标 (CIRA SLIDER 映射)
-      const srcX = (scanX / GK2A_MAX_RAD_X) * diskRx + sw / 2;
-      const srcY = sh / 2 - (scanY / GK2A_MAX_RAD_Y) * diskRy;
+      // 扫描角 → 源图像像素坐标 (CIRA SLIDER 精确映射, 含 +0.5 偏移)
+      const srcX = (lambda / GK2A_MAX_RAD_X) * diskRx + halfW;
+      const srcY = halfH - (phi / GK2A_MAX_RAD_Y) * diskRy;
 
       // 双线性插值采样
       const oi = (oy * outW + ox) * 4;
@@ -1087,12 +1152,11 @@ function reprojectGk2a(sourceCanvas) {
           outData.data[oi + c] = Math.round(v);
         }
       }
-      // 超出源图像范围: 保持透明
     }
   }
 
   outCtx.putImageData(outData, 0, 0);
-  console.log(`[GK2A] 重投影完成: ${sw}x${sh} → ${outW}x${outH} (CIRA参数: lon0=${GK2A_SAT_LON}, maxRad=(${GK2A_MAX_RAD_X},${GK2A_MAX_RAD_Y}), diskR=(${GK2A_DISK_RADIUS_X},${GK2A_DISK_RADIUS_Y}))`);
+  console.log(`[GK2A] 重投影完成 (Web Mercator): ${sw}x${sh} → ${outW}x${outH} (CIRA参数: lon0=${GK2A_SAT_LON}, maxRad=(${GK2A_MAX_RAD_X},${GK2A_MAX_RAD_Y}), diskR=(${GK2A_DISK_RADIUS_X},${GK2A_DISK_RADIUS_Y}))`);
   return outCanvas.toDataURL('image/png');
 }
 
