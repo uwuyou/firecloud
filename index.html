@@ -229,7 +229,7 @@
 
   <div class="info-row">
     <span class="info-label">卫星</span>
-    <span class="info-value">GK2A (128.2E) / VIIRS</span>
+    <span class="info-value">GK2A ELA (128.2E) / VIIRS</span>
   </div>
   <div class="info-row">
     <span class="info-label">实时数据</span>
@@ -276,9 +276,9 @@
 
   <!-- GK2A 实时卫星云图 -->
   <div class="satellite-section" style="border-top:1px solid rgba(255,255,255,0.1)">
-    <div class="section-label">🛰️ GK2A 实时卫星云图 (每10分钟更新)</div>
+    <div class="section-label">🛰️ GK2A 东亚区域云图 (每2分钟更新)</div>
     <div class="toggle-row">
-      <span class="toggle-label">显示 GK2A 实时云图</span>
+      <span class="toggle-label">显示 GK2A 东亚云图</span>
       <label class="toggle-switch">
         <input type="checkbox" id="gk2aToggle" checked onchange="toggleGk2a()">
         <span class="toggle-slider"></span>
@@ -324,7 +324,7 @@
       </button>
     </div>
     <button class="calc-btn" id="gk2aRefreshBtn" onclick="refreshGk2a()" style="border-color:rgba(59,130,246,0.3);background:rgba(59,130,246,0.1);color:#60a5fa;margin-top:8px">
-      <span>🔄</span><span>刷新 GK2A 实时数据</span>
+      <span>🔄</span><span>刷新 GK2A 东亚云图</span>
     </button>
   </div>
 
@@ -709,7 +709,8 @@ function updateSatOpacity(type, val) {
   }
 }
 
-// ===== GK2A 实时卫星云图 (via CIRA SLIDER, 每10分钟更新) =====
+// ===== GK2A ELA 区域卫星云图 (via CIRA SLIDER, 每2分钟更新, 仅覆盖中国及东亚) =====
+const GK2A_SECTOR = 'ela'; // 使用 Extended Local Area 区域扇区, 仅覆盖东亚/中国
 const GK2A_PRODUCTS = {
   geocolor: { name: '真彩色', product: 'geocolor', desc: 'GeoColor 真彩色合成' },
   band_13: { name: '红外亮温', product: 'band_13', desc: 'Band 13 IR (10.5μm)' },
@@ -719,9 +720,8 @@ const GK2A_PRODUCTS = {
   eumetsat_nighttime_microphysics: { name: '夜间云', product: 'eumetsat_nighttime_microphysics', desc: 'EUMETSAT 夜间微物理 RGB' },
 };
 
-// GK2A 全圆盘图像近似地理边界 (卫星位于 128.2°E, 0°N)
-// 地球圆盘半径约 81.3°, 图像含少许边距
-const GK2A_BOUNDS = [[-65, 45], [65, 212]];
+// GK2A ELA 区域扇区地理边界 (覆盖中国及东亚: 约 5°N-55°N, 65°E-160°E)
+const GK2A_BOUNDS = [[5, 65], [55, 160]];
 
 let gk2aCurrentProduct = 'geocolor';
 let gk2aLayer = null;
@@ -730,7 +730,7 @@ let gk2aTimestampStr = null;
 let gk2aRefreshTimer = null;
 let gk2aCountdownTimer = null;
 let gk2aNextRefreshTime = null;
-const GK2A_REFRESH_INTERVAL = 10 * 60 * 1000; // 10分钟
+const GK2A_REFRESH_INTERVAL = 2 * 60 * 1000; // ELA 每2分钟更新
 
 // CORS 代理列表 (用于获取时间戳JSON)
 const CORS_PROXIES = [
@@ -747,7 +747,7 @@ function fetchWithTimeout(url, timeoutMs = 8000) {
 }
 
 async function fetchGk2aTimestamp(product) {
-  const url = `https://slider.cira.colostate.edu/data/json/gk2a/full_disk/${product}/latest_times.json`;
+  const url = `https://slider.cira.colostate.edu/data/json/gk2a/${GK2A_SECTOR}/${product}/latest_times.json`;
   for (const proxyFn of CORS_PROXIES) {
     try {
       const proxyUrl = proxyFn(url);
@@ -779,14 +779,14 @@ async function fetchGk2aTimestamp(product) {
 }
 
 // 时间估算回退: 基于当前时间估算最新可用时间戳
-// SLIDER 每10分钟更新，处理延迟约20分钟
+// ELA 每2分钟更新，处理延迟约5分钟
 function estimateGk2aTimestamp() {
   const now = new Date();
-  // 减去20分钟处理延迟
-  now.setMinutes(now.getMinutes() - 20);
-  // 向下取整到最近的10分钟
+  // 减去5分钟处理延迟
+  now.setMinutes(now.getMinutes() - 5);
+  // 向下取整到最近的2分钟
   const mins = now.getMinutes();
-  now.setMinutes(Math.floor(mins / 10) * 10, 0, 0);
+  now.setMinutes(Math.floor(mins / 2) * 2, 0, 0);
   // 格式: YYYYMMDDHHMM
   const y = now.getUTCFullYear();
   const m = String(now.getUTCMonth() + 1).padStart(2, '0');
@@ -798,7 +798,8 @@ function estimateGk2aTimestamp() {
   return ts;
 }
 
-// GK2A 瓦片拼接: 每张瓦片 688x688, zoom 0=1张, zoom 1=4张(1376x1376), zoom 2=16张(2752x2752)
+// GK2A ELA 瓦片拼接: 每张瓦片 688x688, zoom 0=1张, zoom 1=4张(1376x1376), zoom 2=16张(2752x2752)
+// ELA 区域扇区仅覆盖东亚, 比全圆盘更高效且分辨率更高
 const GK2A_TILE_SIZE = 688;
 
 function getGk2aTileUrl(product, timestamp, row, col, zoomLevel) {
@@ -808,7 +809,7 @@ function getGk2aTileUrl(product, timestamp, row, col, zoomLevel) {
   const zs = String(zoomLevel).padStart(2, '0');
   const rs = String(row).padStart(3, '0');
   const cs = String(col).padStart(3, '0');
-  return `https://slider.cira.colostate.edu/data/imagery/${y}/${m}/${d}/gk2a---full_disk/${product}/${timestamp}/${zs}/${rs}_${cs}.png`;
+  return `https://slider.cira.colostate.edu/data/imagery/${y}/${m}/${d}/gk2a---${GK2A_SECTOR}/${product}/${timestamp}/${zs}/${rs}_${cs}.png`;
 }
 
 // 下载单张瓦片 (支持 CORS 代理回退)
@@ -892,7 +893,7 @@ function getGk2aImageUrl(product, timestamp) {
   const y = timestamp.slice(0, 4);
   const m = timestamp.slice(4, 6);
   const d = timestamp.slice(6, 8);
-  return `https://slider.cira.colostate.edu/data/imagery/${y}/${m}/${d}/gk2a---full_disk/${product}/${timestamp}/00/000_000.png`;
+  return `https://slider.cira.colostate.edu/data/imagery/${y}/${m}/${d}/gk2a---${GK2A_SECTOR}/${product}/${timestamp}/00/000_000.png`;
 }
 
 function formatGk2aTime(ts) {
@@ -1017,7 +1018,7 @@ async function refreshGk2a() {
   btn.innerHTML = '<span class="spinner" style="width:12px;height:12px;border-color:rgba(96,165,250,0.3);border-top-color:#60a5fa"></span><span>刷新中...</span>';
   await loadGk2aLayer(gk2aCurrentProduct);
   btn.disabled = false;
-  btn.innerHTML = '<span>🔄</span><span>刷新 GK2A 实时数据</span>';
+  btn.innerHTML = '<span>🔄</span><span>刷新 GK2A 东亚云图</span>';
 }
 
 function toggleGk2a() {
